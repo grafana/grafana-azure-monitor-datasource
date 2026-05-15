@@ -3,7 +3,7 @@ module github.com/grafana/grafana-azure-monitor-datasource
 go 1.26.3
 
 require (
-	github.com/andybalholm/brotli v1.2.0
+	github.com/andybalholm/brotli v1.2.1
 	github.com/google/go-cmp v0.7.0
 	github.com/grafana/grafana-azure-sdk-go/v2 v2.4.1
 	github.com/grafana/grafana-plugin-sdk-go v0.292.0
