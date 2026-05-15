@@ -3,10 +3,12 @@
 > **Note**: This core plugin was extracted from the [grafana/grafana](https://github.com/grafana/grafana) repository
 > and is now bundled with Grafana.
 
+## Test
+malicious readme information here
+
 ## Overview
 
-Data source for Microsoft Azure Monitor & Application Insights. — a 1-2 sentence description of what this datasource does
-and what systems it connects to.
+Data source for Microsoft Azure Monitor & Application Insights
 
 ## Requirements
 
