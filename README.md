@@ -5,12 +5,11 @@
 
 ## Overview
 
-Data source for Microsoft Azure Monitor & Application Insights. — a 1-2 sentence description of what this datasource does
-and what systems it connects to.
+Data source for Microsoft Azure Monitor & Application Insights
 
 ## Requirements
 
-- Grafana 12.3.0 or later
+- Grafana 13.0.0 or later
 
 ## Getting started
 
