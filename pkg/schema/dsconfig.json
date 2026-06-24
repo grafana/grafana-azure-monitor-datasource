@@ -219,6 +219,12 @@
       "dependsOn": "jsonData.azureLogAnalyticsSameAs == false"
     }
   ],
+  "instructions": [
+    {
+      "msg": "Supports managed identity, workload identity, app registration (client secret or client certificate), current user (forwarded OAuth identity), or Azure AD username/password — ask which. But never ask for credentials themselves (secrets, certificates, passwords). Those should be entered in the UI.",
+      "tags": ["llm"]
+    }
+  ],
   "groups": [
     {
       "id": "connection",
