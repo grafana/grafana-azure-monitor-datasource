@@ -1,0 +1,129 @@
+{
+  "targetApiVersion": "v0alpha1",
+  "settings": {
+    "spec": {
+      "type": "object",
+      "properties": {
+        "jsonData": {
+          "type": "object",
+          "properties": {
+            "appInsightsAppId": {
+              "description": "Application Insights application ID (deprecated).",
+              "type": "string"
+            },
+            "azureAuthType": {
+              "description": "Azure AD authentication type.",
+              "type": "string",
+              "default": "msi",
+              "enum": [
+                "clientsecret",
+                "clientcertificate",
+                "msi",
+                "workloadidentity",
+                "currentuser",
+                "ad-password"
+              ]
+            },
+            "azureCredentials": {
+              "description": "Azure credentials configuration object.",
+              "type": "object"
+            },
+            "azureLogAnalyticsSameAs": {
+              "description": "Use the same credentials for Azure Log Analytics.",
+              "type": "boolean",
+              "default": true
+            },
+            "basicLogsEnabled": {
+              "description": "Enable Azure Monitor Basic Logs queries.",
+              "type": "boolean"
+            },
+            "clientId": {
+              "description": "Azure AD application (client) ID.",
+              "type": "string"
+            },
+            "cloudName": {
+              "description": "Azure cloud environment.",
+              "type": "string",
+              "default": "azuremonitor",
+              "enum": [
+                "azuremonitor",
+                "chinaazuremonitor",
+                "govazuremonitor",
+                "customizedazuremonitor"
+              ]
+            },
+            "customizedRoutes": {
+              "description": "Custom Azure API endpoint overrides.",
+              "type": "object",
+              "additionalProperties": true
+            },
+            "enableSecureSocksProxy": {
+              "description": "Enable secure SOCKS proxy.",
+              "type": "boolean"
+            },
+            "interval": {
+              "description": "Lower limit for the auto group-by time interval.",
+              "type": "string"
+            },
+            "keepCookies": {
+              "description": "Cookie names to forward to Azure.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "logAnalyticsClientId": {
+              "description": "Azure AD client ID for Log Analytics.",
+              "type": "string",
+              "x-dsconfig-depends-on": "jsonData.azureLogAnalyticsSameAs == false"
+            },
+            "logAnalyticsDefaultWorkspace": {
+              "description": "Default Log Analytics workspace ID.",
+              "type": "string"
+            },
+            "logAnalyticsSubscriptionId": {
+              "description": "Azure subscription ID for Log Analytics.",
+              "type": "string",
+              "x-dsconfig-depends-on": "jsonData.azureLogAnalyticsSameAs == false"
+            },
+            "logAnalyticsTenantId": {
+              "description": "Azure AD tenant ID for Log Analytics.",
+              "type": "string",
+              "x-dsconfig-depends-on": "jsonData.azureLogAnalyticsSameAs == false"
+            },
+            "subscriptionId": {
+              "description": "Default Azure subscription ID.",
+              "type": "string"
+            },
+            "tenantId": {
+              "description": "Azure AD directory (tenant) ID.",
+              "type": "string"
+            },
+            "timeout": {
+              "description": "HTTP request timeout in seconds.",
+              "type": "number"
+            }
+          }
+        }
+      }
+    },
+    "secureValues": [
+      {
+        "key": "clientSecret",
+        "description": "Azure AD application client secret."
+      },
+      {
+        "key": "azureClientSecret",
+        "description": "Azure AD client secret (alternate field)."
+      },
+      {
+        "key": "appInsightsApiKey",
+        "description": "Application Insights API key (deprecated)."
+      },
+      {
+        "key": "logAnalyticsClientSecret",
+        "description": "Azure AD client secret for Log Analytics."
+      }
+    ]
+  }
+}

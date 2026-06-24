@@ -144,6 +144,14 @@
       }
     },
     {
+      "id": "jsonData.interval",
+      "key": "interval",
+      "label": "Min Interval",
+      "description": "Lower limit for the auto group-by time interval.",
+      "valueType": "string",
+      "target": "jsonData"
+    },
+    {
       "id": "jsonData.timeout",
       "key": "timeout",
       "label": "Timeout (seconds)",
@@ -256,6 +264,7 @@
       "id": "advanced",
       "title": "Advanced",
       "fieldRefs": [
+        "jsonData.interval",
         "jsonData.timeout",
         "jsonData.keepCookies",
         "jsonData.customizedRoutes",
