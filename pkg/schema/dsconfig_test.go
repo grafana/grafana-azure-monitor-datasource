@@ -17,6 +17,6 @@ func TestPlugin(t *testing.T) {
 		ID:                "grafana-azure-monitor-datasource",
 		ConfigSchemaJSON:  configSchemaJSON,
 		SettingsJSONModel: models.AzureMonitorDataSourceSettings{},
-		SecureKeys:        []string{"clientSecret", "azureClientSecret", "appInsightsApiKey", "logAnalyticsClientSecret"},
+		SecureKeys:        []string{"azureClientSecret", "clientCertificate", "privateKey", "certificatePassword", "clientSecret", "password", "appInsightsApiKey"},
 	})
 }

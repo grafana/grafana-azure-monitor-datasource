@@ -18,9 +18,10 @@ type AzureMonitorDataSourceSettings struct {
 	LogAnalyticsSubscriptionId   string            `json:"logAnalyticsSubscriptionId"`
 	LogAnalyticsDefaultWorkspace string            `json:"logAnalyticsDefaultWorkspace"`
 	AppInsightsAppId             string            `json:"appInsightsAppId"`
-	EnableSecureSocksProxy       bool              `json:"enableSecureSocksProxy"`
 	Interval                     string            `json:"interval"`
 	Timeout                      int               `json:"timeout"`
 	KeepCookies                  []string          `json:"keepCookies"`
 	CustomizedRoutes             map[string]string `json:"customizedRoutes"`
+	OauthPassThru                bool              `json:"oauthPassThru"`
+	DisableGrafanaCache          bool              `json:"disableGrafanaCache"`
 }

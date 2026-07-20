@@ -10,7 +10,7 @@
       "key": "azureCredentials",
       "label": "Authentication type",
       "description": "Choose the type of authentication to Azure services",
-      "valueType": "any",
+      "valueType": "object",
       "target": "jsonData",
       "role": "auth.discriminator",
       "help": {
@@ -40,6 +40,14 @@
       "ui": {
         "component": "switch"
       }
+    },
+    {
+      "id": "jsonData_interval",
+      "key": "interval",
+      "description": "Default query interval reported to Grafana. Parsed by the backend into `AzureMonitorSettings` (`pkg/azuremonitor/types/types.go:82`). Not rendered by the config editor.",
+      "valueType": "string",
+      "target": "jsonData",
+      "tags": ["backend-only"]
     },
     {
       "id": "jsonData_timeout",
@@ -165,7 +173,7 @@
       "id": "jsonData_azureLogAnalyticsSameAs",
       "key": "azureLogAnalyticsSameAs",
       "description": "Deprecated. When set to `false`, the backend hard-fails Log Analytics queries with 'credentials for Log Analytics are no longer supported. Go to the data source configuration to update Azure Monitor credentials' (`pkg/azuremonitor/loganalytics/azure-log-analytics-datasource.go:415-432`). Accepts a bool or a string that `strconv.ParseBool` can parse.",
-      "valueType": "any",
+      "valueType": "boolean",
       "target": "jsonData",
       "tags": ["backend-only", "deprecated"]
     },
@@ -283,7 +291,7 @@
       "order": 3,
       "optional": true,
       "description": "Additional settings are optional settings that can be configured for more control over your data source. This includes Secure Socks Proxy, request timeout, and forwarded cookies.",
-      "fieldRefs": ["jsonData_timeout", "jsonData_keepCookies"]
+      "fieldRefs": ["jsonData_interval", "jsonData_timeout", "jsonData_keepCookies"]
     },
     {
       "id": "deprecated",
