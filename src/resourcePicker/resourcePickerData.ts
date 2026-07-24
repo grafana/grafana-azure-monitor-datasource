@@ -8,8 +8,8 @@ import { resourceTypeDisplayNames, resourceTypes } from '../azureMetadata/resour
 import type AzureMonitorDatasource from '../azure_monitor/azure_monitor_datasource';
 import type AzureResourceGraphDatasource from '../azure_resource_graph/azure_resource_graph_datasource';
 import { type ResourceRow, type ResourceRowGroup, ResourceRowType } from '../components/ResourcePicker/types';
-import {
 import { getCredentials } from '../credentials';
+import {
   addResources,
   parseMultipleResourceDetails,
   parseResourceDetails,
