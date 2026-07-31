@@ -72,6 +72,7 @@ export default class AzureMonitorDatasource extends DataSourceWithBackend<
     this.defaultSubscriptionId = instanceSettings.jsonData.subscriptionId;
     this.basicLogsEnabled = instanceSettings.jsonData.basicLogsEnabled;
     // Gate on the feature toggle so batchAPIEnabled is the single source of truth (callers needn't re-check it).
+    // @ts-expect-error azureMonitorBatchAPI is not yet in the FeatureToggles type published by @grafana/data
     this.batchAPIEnabled = !!config.featureToggles.azureMonitorBatchAPI && instanceSettings.jsonData.batchAPIEnabled;
 
     this.resourcePath = routeNames.azureMonitor;

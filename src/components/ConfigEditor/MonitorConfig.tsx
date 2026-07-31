@@ -82,6 +82,7 @@ export const MonitorConfig = (props: Props) => {
       <ConfigSection title={t('components.monitor-config.title-features', 'Features')}>
         <Stack direction="column" gap={4}>
           <BasicLogsToggle options={options.jsonData} onBasicLogsEnabledChange={onBasicLogsEnabledChange} />
+          {/* @ts-expect-error azureMonitorBatchAPI is not yet in the FeatureToggles type published by @grafana/data */}
           {config.featureToggles.azureMonitorBatchAPI && (
             <BatchAPIToggle options={options.jsonData} onBatchAPIEnabledChange={onBatchAPIEnabledChange} />
           )}

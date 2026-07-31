@@ -35,6 +35,7 @@ interface Statistics {
 // from bootstrap config, so provisioned datasources are included — which
 // config-editor interactions alone cannot capture.
 function queryUsesBatchAPI(query: AzureMonitorQuery): boolean {
+  // @ts-expect-error azureMonitorBatchAPI is not yet in the FeatureToggles type published by @grafana/data
   if (!config.featureToggles.azureMonitorBatchAPI || !query.datasource) {
     return false;
   }
