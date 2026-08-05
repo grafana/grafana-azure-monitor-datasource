@@ -28,3 +28,5 @@ jobs:
         run: echo "value=$(tr -d '[:space:]' < .nvmrc)" >> "$GITHUB_OUTPUT"
 
       - uses: grafana/plugin-actions/bundle-size@bundle-size/v1.0.2
+        with:
+          node-version: ${{ steps.node-version.outputs.value }}
