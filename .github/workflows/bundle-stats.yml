@@ -9,13 +9,12 @@ on:
     branches:
       - main
 
-permissions:
-  contents: read
-  pull-requests: write
-  actions: read
-
 jobs:
   compare:
+    permissions:
+      contents: read
+      pull-requests: write
+      actions: read
     runs-on: ubuntu-latest
 
     steps:
@@ -23,5 +22,9 @@ jobs:
         uses: actions/checkout@v5
         with:
           persist-credentials: false
+
+      - name: Resolve Node.js version
+        id: node-version
+        run: echo "value=$(tr -d '[:space:]' < .nvmrc)" >> "$GITHUB_OUTPUT"
 
       - uses: grafana/plugin-actions/bundle-size@bundle-size/v1.0.2
