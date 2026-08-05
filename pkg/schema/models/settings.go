@@ -12,6 +12,7 @@ type AzureMonitorDataSourceSettings struct {
 	ClientId                     string            `json:"clientId"`
 	SubscriptionId               string            `json:"subscriptionId"`
 	BasicLogsEnabled             bool              `json:"basicLogsEnabled"`
+	BatchAPIEnabled              bool              `json:"batchAPIEnabled"`
 	AzureLogAnalyticsSameAs      bool              `json:"azureLogAnalyticsSameAs"`
 	LogAnalyticsTenantId         string            `json:"logAnalyticsTenantId"`
 	LogAnalyticsClientId         string            `json:"logAnalyticsClientId"`
@@ -21,6 +22,7 @@ type AzureMonitorDataSourceSettings struct {
 	Interval                     string            `json:"interval"`
 	Timeout                      int               `json:"timeout"`
 	KeepCookies                  []string          `json:"keepCookies"`
+	EnableSecureSocksProxy       bool              `json:"enableSecureSocksProxy"`
 	CustomizedRoutes             map[string]string `json:"customizedRoutes"`
 	OauthPassThru                bool              `json:"oauthPassThru"`
 	DisableGrafanaCache          bool              `json:"disableGrafanaCache"`

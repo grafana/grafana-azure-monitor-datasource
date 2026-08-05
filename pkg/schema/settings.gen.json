@@ -26,6 +26,11 @@
             "type": "boolean",
             "default": false
           },
+          "batchAPIEnabled": {
+            "description": "Use the Azure Monitor batch metrics endpoint for multi-resource metric queries. Only takes effect when Grafana has the `azureMonitorBatchAPI` feature toggle enabled — the frontend gates on it in `src/azure_monitor/azure_monitor_datasource.ts:76` and the backend in `pkg/azuremonitor/metrics/azuremonitor-datasource.go:103,117`.",
+            "type": "boolean",
+            "default": false
+          },
           "clientId": {
             "description": "Legacy top-level client ID (paired with legacy `tenantId`/`clientSecret`). Preserved so pre-migration datasources continue to authenticate; the current `AzureCredentialsForm` writes client inside `jsonData.azureCredentials.clientId` and clears this field.",
             "type": "string"
@@ -42,6 +47,11 @@
           "disableGrafanaCache": {
             "description": "Set to `true` by `@grafana/azure-sdk`'s `updateDatasourceCredentials` when `currentuser` authentication is selected (`grafana-azure-sdk-react/src/credentials/AzureCredentialsConfig.ts:424`) to prevent user-scoped results from leaking across users. No editor UI.",
             "type": "boolean"
+          },
+          "enableSecureSocksProxy": {
+            "description": "Route data source requests through Grafana's Secure Socks Proxy. Rendered by `@grafana/ui`'s `SecureSocksProxySettings` in `src/components/ConfigEditor/ConfigEditor.tsx:122`, and only when the Grafana instance has `secureSocksDSProxyEnabled`.",
+            "type": "boolean",
+            "default": false
           },
           "interval": {
             "description": "Default query interval reported to Grafana. Parsed by the backend into `AzureMonitorSettings` (`pkg/azuremonitor/types/types.go:82`). Not rendered by the config editor.",

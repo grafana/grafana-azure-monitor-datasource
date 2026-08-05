@@ -42,6 +42,18 @@
       }
     },
     {
+      "id": "jsonData_batchAPIEnabled",
+      "key": "batchAPIEnabled",
+      "label": "Enable Batch API",
+      "description": "Use the Azure Monitor batch metrics endpoint for multi-resource metric queries. Only takes effect when Grafana has the `azureMonitorBatchAPI` feature toggle enabled — the frontend gates on it in `src/azure_monitor/azure_monitor_datasource.ts:76` and the backend in `pkg/azuremonitor/metrics/azuremonitor-datasource.go:103,117`.",
+      "valueType": "boolean",
+      "target": "jsonData",
+      "defaultValue": false,
+      "ui": {
+        "component": "switch"
+      }
+    },
+    {
       "id": "jsonData_interval",
       "key": "interval",
       "description": "Default query interval reported to Grafana. Parsed by the backend into `AzureMonitorSettings` (`pkg/azuremonitor/types/types.go:82`). Not rendered by the config editor.",
@@ -75,6 +87,18 @@
       "ui": {
         "component": "list",
         "placeholder": "New cookie (hit enter to add)"
+      }
+    },
+    {
+      "id": "jsonData_enableSecureSocksProxy",
+      "key": "enableSecureSocksProxy",
+      "label": "Enable Secure Socks Proxy",
+      "description": "Route data source requests through Grafana's Secure Socks Proxy. Rendered by `@grafana/ui`'s `SecureSocksProxySettings` in `src/components/ConfigEditor/ConfigEditor.tsx:122`, and only when the Grafana instance has `secureSocksDSProxyEnabled`.",
+      "valueType": "boolean",
+      "target": "jsonData",
+      "defaultValue": false,
+      "ui": {
+        "component": "switch"
       }
     },
     {
@@ -283,7 +307,7 @@
       "id": "monitor",
       "title": "Azure Monitor",
       "order": 2,
-      "fieldRefs": ["jsonData_subscriptionId", "jsonData_basicLogsEnabled"]
+      "fieldRefs": ["jsonData_subscriptionId", "jsonData_basicLogsEnabled", "jsonData_batchAPIEnabled"]
     },
     {
       "id": "additional-settings",
@@ -291,7 +315,7 @@
       "order": 3,
       "optional": true,
       "description": "Additional settings are optional settings that can be configured for more control over your data source. This includes Secure Socks Proxy, request timeout, and forwarded cookies.",
-      "fieldRefs": ["jsonData_interval", "jsonData_timeout", "jsonData_keepCookies"]
+      "fieldRefs": ["jsonData_interval", "jsonData_timeout", "jsonData_keepCookies", "jsonData_enableSecureSocksProxy"]
     },
     {
       "id": "deprecated",
