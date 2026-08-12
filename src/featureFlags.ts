@@ -1,6 +1,7 @@
 import { OpenFeature, ProviderEvents } from '@openfeature/web-sdk';
 import { useEffect, useState } from 'react';
 
+// @ts-expect-error createOpenFeatureOFREPWebProvider is not yet exported by the published @grafana/runtime
 import { config, createOpenFeatureOFREPWebProvider } from '@grafana/runtime';
 
 import pluginJson from './plugin.json';
@@ -40,6 +41,7 @@ export function initFeatureFlags(): void {
 export function isBatchAPIFlagEnabled(): boolean {
   const details = OpenFeature.getClient(OPEN_FEATURE_DOMAIN).getBooleanDetails(BATCH_API_FLAG, false);
   if (details.errorCode) {
+    // @ts-expect-error datasources.azureMonitorBatchAPI is not yet in the FeatureToggles type published by @grafana/data
     return Boolean(config.featureToggles[BATCH_API_FLAG]);
   }
   return details.value;
