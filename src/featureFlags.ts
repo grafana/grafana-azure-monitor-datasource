@@ -20,6 +20,12 @@ export const BATCH_API_FLAG = 'datasources.azureMonitorBatchAPI';
  * plugin module load.
  */
 export function initFeatureFlags(): void {
+  // Older Grafana versions do not export the OFREP provider factory; skip
+  // registration there and let isBatchAPIFlagEnabled fall back to the
+  // bootstrap config.featureToggles value.
+  if (typeof createOpenFeatureOFREPWebProvider !== 'function') {
+    return;
+  }
   // Skip when the domain already has a provider so module re-evaluation does
   // not reset OpenFeature state.
   if (OpenFeature.getProvider(OPEN_FEATURE_DOMAIN) !== OpenFeature.getProvider()) {
