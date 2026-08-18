@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/grafana/grafana-azure-sdk-go/v2/azcredentials"
 	"github.com/grafana/grafana-azure-sdk-go/v2/azsettings"
@@ -42,7 +43,7 @@ func TestHttpClient_AzureCredentials(t *testing.T) {
 			Scopes: []string{"https://management.azure.com/.default"},
 		}
 
-		_, err := newHTTPClient(context.Background(), route, model, settings, azureSettings, provider)
+		_, err := newHTTPClient(context.Background(), route, model, settings, azureSettings, provider, 0)
 		require.NoError(t, err)
 
 		require.NotNil(t, provider.opts)
@@ -55,7 +56,7 @@ func TestHttpClient_AzureCredentials(t *testing.T) {
 			Scopes: []string{},
 		}
 
-		_, err := newHTTPClient(context.Background(), route, model, settings, azureSettings, provider)
+		_, err := newHTTPClient(context.Background(), route, model, settings, azureSettings, provider, 0)
 		require.NoError(t, err)
 
 		assert.NotNil(t, provider.opts)
@@ -76,7 +77,7 @@ func TestHttpClient_AzureCredentials(t *testing.T) {
 			"Grafanaheader": {"GrafanaValue"},
 			"Azureheader":   {"AzureValue"},
 		}
-		_, err := newHTTPClient(context.Background(), route, model, settings, azureSettings, provider)
+		_, err := newHTTPClient(context.Background(), route, model, settings, azureSettings, provider, 0)
 		require.NoError(t, err)
 
 		assert.NotNil(t, provider.opts)
@@ -85,6 +86,26 @@ func TestHttpClient_AzureCredentials(t *testing.T) {
 			assert.Len(t, provider.opts.Header, 2)
 			assert.Equal(t, res, provider.opts.Header)
 		}
+	})
+
+	t.Run("should override client timeout when a positive timeout is passed", func(t *testing.T) {
+		route := types.AzRoute{}
+
+		_, err := newHTTPClient(context.Background(), route, model, settings, azureSettings, provider, 45*time.Second)
+		require.NoError(t, err)
+
+		require.NotNil(t, provider.opts.Timeouts)
+		assert.Equal(t, 45*time.Second, provider.opts.Timeouts.Timeout)
+	})
+
+	t.Run("should leave the SDK-resolved timeout untouched when zero is passed", func(t *testing.T) {
+		route := types.AzRoute{}
+
+		_, err := newHTTPClient(context.Background(), route, model, settings, azureSettings, provider, 0)
+		require.NoError(t, err)
+
+		require.NotNil(t, provider.opts.Timeouts)
+		assert.NotEqual(t, 45*time.Second, provider.opts.Timeouts.Timeout)
 	})
 }
 

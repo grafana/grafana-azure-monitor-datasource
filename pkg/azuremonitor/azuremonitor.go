@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"time"
 
 	"github.com/grafana/grafana-azure-sdk-go/v2/azcredentials"
 	"github.com/grafana/grafana-azure-sdk-go/v2/azsettings"
@@ -130,9 +131,9 @@ type DataSource struct {
 	logger          log.Logger
 }
 
-func getDatasourceService(ctx context.Context, settings *backend.DataSourceInstanceSettings, azureSettings *azsettings.AzureSettings, clientProvider *httpclient.Provider, dsInfo types.DatasourceInfo, routeName string, logger log.Logger) (types.DatasourceService, error) {
+func getDatasourceService(ctx context.Context, settings *backend.DataSourceInstanceSettings, azureSettings *azsettings.AzureSettings, clientProvider *httpclient.Provider, dsInfo types.DatasourceInfo, routeName string, timeout time.Duration, logger log.Logger) (types.DatasourceService, error) {
 	route := dsInfo.Routes[routeName]
-	client, err := newHTTPClient(ctx, route, dsInfo, settings, azureSettings, clientProvider)
+	client, err := newHTTPClient(ctx, route, dsInfo, settings, azureSettings, clientProvider, timeout)
 	if err != nil {
 		return types.DatasourceService{}, err
 	}
@@ -189,8 +190,11 @@ func NewInstanceSettings(clientProvider *httpclient.Provider, executors map[stri
 			Services:                map[string]types.DatasourceService{},
 		}
 
+		legacy := legacyTimeout(jsonData)
+
 		for routeName := range executors {
-			service, err := getDatasourceService(ctx, &settings, azureSettings, clientProvider, model, routeName, logger)
+			timeout := resolveTimeout(routeName, azMonitorSettings, legacy)
+			service, err := getDatasourceService(ctx, &settings, azureSettings, clientProvider, model, routeName, timeout, logger)
 			if err != nil {
 				return nil, err
 			}
@@ -211,7 +215,8 @@ func NewInstanceSettings(clientProvider *httpclient.Provider, executors map[stri
 			if u, err := url.Parse(route.URL); err != nil || u.Scheme == "" || u.Host == "" {
 				return nil, fmt.Errorf("invalid %s route URL %q: must be an absolute URL like https://metrics.monitor.azure.com", azureMonitorBatchMetrics, route.URL)
 			}
-			batchService, err := getDatasourceService(ctx, &settings, azureSettings, clientProvider, model, azureMonitorBatchMetrics, logger)
+			batchTimeout := resolveTimeout(azureMonitorBatchMetrics, azMonitorSettings, legacy)
+			batchService, err := getDatasourceService(ctx, &settings, azureSettings, clientProvider, model, azureMonitorBatchMetrics, batchTimeout, logger)
 			if err != nil {
 				return nil, err
 			}

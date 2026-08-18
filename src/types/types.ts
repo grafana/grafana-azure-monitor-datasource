@@ -49,7 +49,11 @@ export interface AzureMonitorDataSourceJsonData extends AzureDataSourceJsonData 
   appInsightsAppId?: string;
 
   enableSecureSocksProxy?: boolean;
+  /** @deprecated use logsTimeout/metricsTimeout/resourceGraphTimeout */
   timeout?: number;
+  logsTimeout?: number;
+  metricsTimeout?: number;
+  resourceGraphTimeout?: number;
   keepCookies?: string[];
 }
 

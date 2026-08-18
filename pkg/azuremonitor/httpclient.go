@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/grafana/grafana-azure-sdk-go/v2/azcredentials"
 	"github.com/grafana/grafana-azure-sdk-go/v2/azhttpclient"
@@ -22,10 +23,14 @@ type Provider interface {
 	GetTLSConfig(...httpclient.Options) (*tls.Config, error)
 }
 
-func newHTTPClient(ctx context.Context, route types.AzRoute, model types.DatasourceInfo, settings *backend.DataSourceInstanceSettings, azureSettings *azsettings.AzureSettings, clientProvider Provider) (*http.Client, error) {
+func newHTTPClient(ctx context.Context, route types.AzRoute, model types.DatasourceInfo, settings *backend.DataSourceInstanceSettings, azureSettings *azsettings.AzureSettings, clientProvider Provider, timeout time.Duration) (*http.Client, error) {
 	clientOpts, err := settings.HTTPClientOptions(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("error getting HTTP options: %w", err)
+	}
+
+	if timeout > 0 {
+		clientOpts.Timeouts.Timeout = timeout
 	}
 
 	for header, value := range route.Headers {
