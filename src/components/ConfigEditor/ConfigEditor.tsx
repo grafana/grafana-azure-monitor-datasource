@@ -45,8 +45,13 @@ export const ConfigEditor = memo(function ConfigEditor(props: Props) {
   // isn't already explicitly set, drop `timeout`, and save immediately - no
   // user action required.
   useEffect(() => {
-    if (options.readOnly) return;
-    if (options.jsonData.timeout === undefined) return;
+    if (options.readOnly) {
+      return;
+    }
+
+    if (options.jsonData.timeout === undefined) {
+      return;
+    }
 
     const { timeout, ...jsonData } = options.jsonData;
     const migrated: AzureMonitorDataSourceSettings = {
