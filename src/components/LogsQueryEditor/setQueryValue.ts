@@ -2,6 +2,7 @@ import { type SelectableValue } from '@grafana/data';
 
 import { ResultFormat } from '../../dataquery';
 import { type AzureMonitorQuery } from '../../types/query';
+
 import { type LogTier } from './utils';
 
 export function setKustoQuery(query: AzureMonitorQuery, kustoQuery: string): AzureMonitorQuery {
