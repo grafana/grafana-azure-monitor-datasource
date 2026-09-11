@@ -135,6 +135,9 @@
     "keywords": [
       "azure",
       "monitor",
+      "metrics",
+      "logs",
+      "cloud",
       "Application Insights",
       "Log Analytics",
       "App Insights"
@@ -179,7 +182,7 @@
     "updated": "%TODAY%"
   },
   "dependencies": {
-    "grafanaDependency": ">=12.3.0",
+    "grafanaDependency": ">=12.3.0-0",
     "plugins": []
   },
   "metrics": true,
@@ -208,12 +211,5 @@
     "sv-SE",
     "tr-TR",
     "zh-Hant"
-  ],
-  "keywords": [
-    "azure",
-    "monitor",
-    "metrics",
-    "logs",
-    "cloud"
   ]
 }
