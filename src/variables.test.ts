@@ -1,6 +1,6 @@
 import { from, lastValueFrom } from 'rxjs';
 
-import { type DataQueryRequest, toDataFrame } from '@grafana/data';
+import { type DataQueryRequest, dateTime, toDataFrame } from '@grafana/data';
 
 import { AzureQueryType } from './dataquery';
 import createMockDatasource from './mocks/datasource';
@@ -504,6 +504,107 @@ describe('VariableSupport', () => {
       } as DataQueryRequest<AzureMonitorQuery>;
       const result = await lastValueFrom(variableSupport.query(mockRequest));
       expect(result.data[0].fields[0].values).toEqual(expectedResults);
+    });
+
+    it('fetches dimension values using the dashboard time range', async () => {
+      const getDimensionValues = jest.fn().mockResolvedValue([{ text: 'api', value: 'api' }]);
+      const variableSupport = new VariableSupport(createMockDatasource({ getDimensionValues }));
+      const range = {
+        from: dateTime('2026-08-27T12:00:00.000Z'),
+        to: dateTime('2026-08-27T13:00:00.000Z'),
+        raw: { from: 'now-1h', to: 'now' },
+      };
+      const mockRequest = {
+        range,
+        targets: [
+          {
+            refId: 'A',
+            queryType: AzureQueryType.DimensionValuesQuery,
+            subscription: 'sub',
+            resourceGroup: 'rg',
+            namespace: 'ns',
+            resource: 'resource',
+            customNamespace: 'custom/ns',
+            metricName: 'Requests',
+            dimension: 'CloudRole',
+          } as AzureMonitorQuery,
+        ],
+      } as DataQueryRequest<AzureMonitorQuery>;
+
+      const result = await lastValueFrom(variableSupport.query(mockRequest));
+
+      expect(getDimensionValues).toHaveBeenCalledWith(
+        'sub',
+        'rg',
+        'ns',
+        'resource',
+        'Requests',
+        'CloudRole',
+        range,
+        'custom/ns'
+      );
+      expect(result.data[0].fields[0].values).toEqual(['api']);
+    });
+
+    it('returns an empty frame when a complete dimension values query has no values', async () => {
+      const variableSupport = new VariableSupport(
+        createMockDatasource({ getDimensionValues: jest.fn().mockResolvedValue([]) })
+      );
+      const mockRequest = {
+        range: {
+          from: dateTime('2026-08-27T12:00:00.000Z'),
+          to: dateTime('2026-08-27T13:00:00.000Z'),
+          raw: { from: 'now-1h', to: 'now' },
+        },
+        targets: [
+          {
+            refId: 'A',
+            queryType: AzureQueryType.DimensionValuesQuery,
+            subscription: 'sub',
+            resourceGroup: 'rg',
+            namespace: 'ns',
+            resource: 'resource',
+            metricName: 'Requests',
+            dimension: 'CloudRole',
+          } as AzureMonitorQuery,
+        ],
+      } as DataQueryRequest<AzureMonitorQuery>;
+
+      const result = await lastValueFrom(variableSupport.query(mockRequest));
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].length).toBe(0);
+    });
+
+    it('does not call Azure when a required dimension values field resolves empty', async () => {
+      const getDimensionValues = jest.fn();
+      const variableSupport = new VariableSupport(createMockDatasource({ getDimensionValues }), {
+        replace: (value: string) => (value === '$dimension' ? '' : value),
+      } as never);
+      const mockRequest = {
+        range: {
+          from: dateTime('2026-08-27T12:00:00.000Z'),
+          to: dateTime('2026-08-27T13:00:00.000Z'),
+          raw: { from: 'now-1h', to: 'now' },
+        },
+        targets: [
+          {
+            refId: 'A',
+            queryType: AzureQueryType.DimensionValuesQuery,
+            subscription: 'sub',
+            resourceGroup: 'rg',
+            namespace: 'ns',
+            resource: 'resource',
+            metricName: 'Requests',
+            dimension: '$dimension',
+          } as AzureMonitorQuery,
+        ],
+      } as DataQueryRequest<AzureMonitorQuery>;
+
+      const result = await lastValueFrom(variableSupport.query(mockRequest));
+
+      expect(getDimensionValues).not.toHaveBeenCalled();
+      expect(result.data).toEqual([]);
     });
 
     it('returns no data if calling metric names but the subscription is a template variable with no value', async () => {

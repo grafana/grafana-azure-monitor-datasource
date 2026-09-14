@@ -2,7 +2,6 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { select, openMenu } from 'react-select-event';
 
- 
 import type * as ui from '@grafana/ui';
 
 import { AzureQueryType } from '../../dataquery';
@@ -332,6 +331,134 @@ describe('VariableEditor:', () => {
       );
     });
 
+    it('shows the dimension values query type and required cascade fields', async () => {
+      render(
+        <VariableEditor
+          {...defaultProps}
+          query={{
+            refId: 'A',
+            queryType: AzureQueryType.DimensionValuesQuery,
+            subscription: 'sub',
+            resourceGroup: 'rg',
+            namespace: 'foo/bar',
+            resource: 'foobar',
+          }}
+        />
+      );
+
+      openMenu(screen.getByLabelText('Select query type'));
+      expect((await screen.findAllByText('Dimension Values')).length).toBeGreaterThan(0);
+      expect(screen.getByLabelText('Select subscription')).toBeInTheDocument();
+      expect(screen.getByLabelText('Select resource group')).toBeInTheDocument();
+      expect(screen.getByLabelText('Select namespace')).toBeInTheDocument();
+      expect(screen.getByLabelText('Select resource')).toBeInTheDocument();
+      expect(screen.getByLabelText('Select custom namespace')).toBeInTheDocument();
+      expect(screen.getByLabelText('Select metric name')).toBeInTheDocument();
+      expect(screen.getByLabelText('Select dimension name')).toBeInTheDocument();
+    });
+
+    it('loads metric and dimension options for a dimension values query', async () => {
+      const datasource = createMockDatasource({
+        getVariablesRaw: jest.fn().mockReturnValue([{ label: 'query0', name: 'var0' }]),
+        getMetricNamespaces: jest.fn().mockResolvedValue([]),
+        getMetricNames: jest.fn().mockResolvedValue([{ text: 'Requests', value: 'Requests' }]),
+      });
+      datasource.azureMonitorDatasource.getMetricMetadata = jest.fn().mockResolvedValue({
+        primaryAggType: 'Count',
+        supportedAggTypes: ['Count'],
+        supportedTimeGrains: [],
+        dimensions: [{ label: 'Cloud role', value: 'CloudRole' }],
+      });
+      render(
+        <VariableEditor
+          {...defaultProps}
+          datasource={datasource}
+          query={{
+            refId: 'A',
+            queryType: AzureQueryType.DimensionValuesQuery,
+            subscription: 'sub',
+            resourceGroup: 'rg',
+            namespace: 'foo/bar',
+            resource: 'foobar',
+            customNamespace: 'custom/ns',
+            metricName: 'Requests',
+          }}
+        />
+      );
+
+      openMenu(screen.getByLabelText('Select metric name'));
+      expect((await screen.findAllByText('Requests')).length).toBeGreaterThan(0);
+      expect(screen.getByText('query0')).toBeInTheDocument();
+      openMenu(screen.getByLabelText('Select dimension name'));
+      expect(await screen.findByText('Cloud role')).toBeInTheDocument();
+      expect(screen.getAllByText('query0').length).toBeGreaterThan(0);
+      expect(datasource.getMetricNames).toHaveBeenCalledWith('sub', 'rg', 'foo/bar', 'foobar', 'custom/ns');
+      expect(datasource.azureMonitorDatasource.getMetricMetadata).toHaveBeenCalledWith({
+        subscription: 'sub',
+        resourceGroup: 'rg',
+        metricNamespace: 'foo/bar',
+        resourceName: 'foobar',
+        customNamespace: 'custom/ns',
+        metricName: 'Requests',
+      });
+    });
+
+    it('clears metric and dimension when a parent selection changes', async () => {
+      const onChange = jest.fn();
+      render(
+        <VariableEditor
+          {...defaultProps}
+          onChange={onChange}
+          query={{
+            refId: 'A',
+            queryType: AzureQueryType.DimensionValuesQuery,
+            subscription: 'old-sub',
+            resourceGroup: 'rg',
+            namespace: 'foo/bar',
+            resource: 'foobar',
+            metricName: 'Requests',
+            dimension: 'CloudRole',
+          }}
+        />
+      );
+
+      openMenu(screen.getByLabelText('Select subscription'));
+      await userEvent.click(await screen.findByText('Primary Subscription'));
+
+      expect(onChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          subscription: 'sub',
+          metricName: undefined,
+          dimension: undefined,
+        })
+      );
+    });
+
+    it('clears region state when changing query type', async () => {
+      const onChange = jest.fn();
+      const { rerender } = render(
+        <VariableEditor
+          {...defaultProps}
+          onChange={onChange}
+          query={{
+            refId: 'A',
+            queryType: AzureQueryType.ResourceNamesQuery,
+            subscription: 'sub',
+            region: 'eastus',
+          }}
+        />
+      );
+      expect(await screen.findByLabelText('Select region')).toBeInTheDocument();
+
+      openMenu(screen.getByLabelText('Select query type'));
+      await userEvent.click(await screen.findByText('Dimension Values'));
+      const changedQuery = onChange.mock.calls.at(-1)[0];
+      rerender(<VariableEditor {...defaultProps} onChange={onChange} query={changedQuery} />);
+
+      expect(changedQuery.region).toBeUndefined();
+      await waitFor(() => expect(screen.queryByLabelText('Select region')).not.toBeInTheDocument());
+    });
+
     it('should clean up related fields', async () => {
       const onChange = jest.fn();
       const { rerender } = render(<VariableEditor {...defaultProps} onChange={onChange} />);
@@ -346,6 +473,10 @@ describe('VariableEditor:', () => {
           resourceGroup: undefined,
           namespace: undefined,
           resource: undefined,
+          region: undefined,
+          customNamespace: undefined,
+          metricName: undefined,
+          dimension: undefined,
           refId: 'A',
         })
       );

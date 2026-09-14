@@ -50,6 +50,10 @@ type AzureMonitorQuery struct {
 	Region *string `json:"region,omitempty"`
 	// Custom namespace used in template variable queries
 	CustomNamespace *string `json:"customNamespace,omitempty"`
+	// Metric name used in dimension value template variable queries
+	MetricName *string `json:"metricName,omitempty"`
+	// Dimension used in dimension value template variable queries
+	Dimension *string `json:"dimension,omitempty"`
 	// Used only for exemplar queries from Prometheus
 	Query *string `json:"query,omitempty"`
 	// Used to configure the HTTP request timeout
@@ -629,6 +633,7 @@ const (
 	AzureQueryTypeNamespacesQuery           AzureQueryType = "Azure Namespaces"
 	AzureQueryTypeResourceNamesQuery        AzureQueryType = "Azure Resource Names"
 	AzureQueryTypeMetricNamesQuery          AzureQueryType = "Azure Metric Names"
+	AzureQueryTypeDimensionValuesQuery      AzureQueryType = "Azure Dimension Values"
 	AzureQueryTypeWorkspacesQuery           AzureQueryType = "Azure Workspaces"
 	AzureQueryTypeLocationsQuery            AzureQueryType = "Azure Regions"
 	AzureQueryTypeGrafanaTemplateVariableFn AzureQueryType = "Grafana Template Variable Function"

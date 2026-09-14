@@ -1,7 +1,8 @@
+import { type TimeRange } from '@grafana/data';
 import { type TemplateSrv } from '@grafana/runtime';
 
 import { type AzureMonitorResource } from '../dataquery';
-import { type GetMetricNamespacesQuery, type GetMetricNamesQuery } from '../types/types';
+import { type GetDimensionValuesQuery, type GetMetricNamespacesQuery, type GetMetricNamesQuery } from '../types/types';
 
 export default class UrlBuilder {
   static buildResourceUri(templateSrv: TemplateSrv, resource: AzureMonitorResource, multipleResources?: boolean) {
@@ -128,5 +129,32 @@ export default class UrlBuilder {
     apiVersion = '2025-02-01'
   ) {
     return `${baseUrl}${resourceUri}/tables/${tableName}?api-version=${apiVersion}`;
+  }
+
+  static buildAzureMonitorGetDimensionValuesUrl(
+    baseUrl: string,
+    apiVersion: string,
+    query: GetDimensionValuesQuery,
+    range: TimeRange,
+    templateSrv: TemplateSrv
+  ) {
+    const resourceUri = UrlBuilder.buildResourceUri(templateSrv, {
+      subscription: query.subscription,
+      resourceGroup: query.resourceGroup,
+      metricNamespace: query.metricNamespace,
+      resourceName: query.resourceName,
+    });
+    // A temporary origin lets URLSearchParams encode the datasource-relative URL safely.
+    const url = new URL('http://localhost');
+    url.pathname = `/${baseUrl}${resourceUri}/providers/microsoft.insights/metrics`;
+    url.searchParams.set('api-version', apiVersion);
+    url.searchParams.set('timespan', `${range.from.toISOString()}/${range.to.toISOString()}`);
+    url.searchParams.set('metricnames', query.metricName);
+    url.searchParams.set('metricnamespace', query.customNamespace || query.metricNamespace);
+    url.searchParams.set('resultType', 'metadata');
+    // Azure requires at least one dimension under eq for resultType=metadata.
+    url.searchParams.set('$filter', `${query.dimension.trim()} eq '*'`);
+    url.searchParams.set('top', '1000');
+    return url.href.slice(url.origin.length + 1);
   }
 }

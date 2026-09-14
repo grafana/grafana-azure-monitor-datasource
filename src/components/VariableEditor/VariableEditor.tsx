@@ -39,6 +39,7 @@ const VariableEditor = (props: Props) => {
     { label: 'Regions', value: AzureQueryType.LocationsQuery },
     { label: 'Resource Names', value: AzureQueryType.ResourceNamesQuery },
     { label: 'Metric Names', value: AzureQueryType.MetricNamesQuery },
+    { label: 'Dimension Values', value: AzureQueryType.DimensionValuesQuery },
     { label: 'Workspaces', value: AzureQueryType.WorkspacesQuery },
     { label: 'Resource Graph', value: AzureQueryType.AzureResourceGraph },
     { label: 'Logs', value: AzureQueryType.LogAnalytics },
@@ -63,6 +64,7 @@ const VariableEditor = (props: Props) => {
   const [requireResourceGroup, setRequireResourceGroup] = useState(false);
   const [requireNamespace, setRequireNamespace] = useState(false);
   const [requireCustomNamespace, setRequireCustomNamespace] = useState(false);
+  const [hasCustomNamespace, setHasCustomNamespace] = useState(false);
   const [requireResource, setRequireResource] = useState(false);
   const [subscriptions, setSubscriptions] = useState<SelectableValue[]>([]);
   const [resourceGroups, setResourceGroups] = useState<SelectableValue[]>([]);
@@ -70,6 +72,8 @@ const VariableEditor = (props: Props) => {
   const [customNamespaces, setCustomNamespaces] = useState<SelectableValue[]>([]);
   const [resources, setResources] = useState<SelectableValue[]>([]);
   const [regions, setRegions] = useState<SelectableValue[]>([]);
+  const [metricNames, setMetricNames] = useState<SelectableValue[]>([]);
+  const [dimensions, setDimensions] = useState<SelectableValue[]>([]);
   const [errorMessage, setError] = useLastError();
   const queryType = typeof query === 'string' ? '' : query.queryType;
 
@@ -85,10 +89,12 @@ const VariableEditor = (props: Props) => {
     setRequireSubscription(false);
     setHasResourceGroup(false);
     setHasNamespace(false);
+    setHasRegion(false);
     setRequireResourceGroup(false);
     setRequireNamespace(false);
     setRequireResource(false);
     setRequireCustomNamespace(false);
+    setHasCustomNamespace(false);
     switch (queryType) {
       case AzureQueryType.ResourceGroupsQuery:
       case AzureQueryType.WorkspacesQuery:
@@ -109,6 +115,13 @@ const VariableEditor = (props: Props) => {
         setRequireResourceGroup(true);
         setRequireNamespace(true);
         setRequireResource(true);
+        break;
+      case AzureQueryType.DimensionValuesQuery:
+        setRequireSubscription(true);
+        setRequireResourceGroup(true);
+        setRequireNamespace(true);
+        setRequireResource(true);
+        setHasCustomNamespace(true);
         break;
       case AzureQueryType.LocationsQuery:
         setRequireSubscription(true);
@@ -211,6 +224,37 @@ const VariableEditor = (props: Props) => {
     }
   }, [datasource, subscription, resourceGroup, namespace, resource]);
 
+  const customNamespace = (typeof query === 'object' && query.customNamespace) || '';
+  const metricName = (typeof query === 'object' && query.metricName) || '';
+  // When subscription, resource group, namespace, and resource name are all set, retrieve metric names
+  useEffect(() => {
+    if (subscription && resourceGroup && namespace && resource) {
+      datasource
+        .getMetricNames(subscription, resourceGroup, namespace, resource, customNamespace || undefined)
+        .then((metrics) => {
+          setMetricNames(metrics.map((metric) => ({ label: metric.text, value: metric.value })));
+        });
+    }
+  }, [datasource, subscription, resourceGroup, namespace, resource, customNamespace]);
+
+  // When a metric is also selected, retrieve the dimensions it supports
+  useEffect(() => {
+    if (subscription && resourceGroup && namespace && resource && metricName) {
+      datasource.azureMonitorDatasource
+        .getMetricMetadata({
+          subscription,
+          resourceGroup,
+          metricNamespace: namespace,
+          resourceName: resource,
+          customNamespace: customNamespace || undefined,
+          metricName,
+        })
+        .then((metadata) => {
+          setDimensions(metadata.dimensions);
+        });
+    }
+  }, [datasource, subscription, resourceGroup, namespace, resource, customNamespace, metricName]);
+
   if (typeof query === 'string') {
     // still migrating the query
     return null;
@@ -225,6 +269,10 @@ const VariableEditor = (props: Props) => {
         resourceGroup: undefined,
         namespace: undefined,
         resource: undefined,
+        region: undefined,
+        customNamespace: undefined,
+        metricName: undefined,
+        dimension: undefined,
       });
     }
   };
@@ -237,6 +285,11 @@ const VariableEditor = (props: Props) => {
         resourceGroup: undefined,
         namespace: undefined,
         resource: undefined,
+        ...(queryType === AzureQueryType.DimensionValuesQuery && {
+          customNamespace: undefined,
+          metricName: undefined,
+          dimension: undefined,
+        }),
       });
     }
   };
@@ -247,6 +300,11 @@ const VariableEditor = (props: Props) => {
       resourceGroup: selectableValue.value,
       namespace: undefined,
       resource: undefined,
+      ...(queryType === AzureQueryType.DimensionValuesQuery && {
+        customNamespace: undefined,
+        metricName: undefined,
+        dimension: undefined,
+      }),
     });
   };
 
@@ -255,6 +313,11 @@ const VariableEditor = (props: Props) => {
       ...query,
       namespace: selectableValue.value,
       resource: undefined,
+      ...(queryType === AzureQueryType.DimensionValuesQuery && {
+        customNamespace: undefined,
+        metricName: undefined,
+        dimension: undefined,
+      }),
     });
   };
 
@@ -269,6 +332,11 @@ const VariableEditor = (props: Props) => {
     onChange({
       ...query,
       resource: selectableValue.value,
+      ...(queryType === AzureQueryType.DimensionValuesQuery && {
+        customNamespace: undefined,
+        metricName: undefined,
+        dimension: undefined,
+      }),
     });
   };
 
@@ -280,6 +348,23 @@ const VariableEditor = (props: Props) => {
     onChange({
       ...query,
       customNamespace: selectableValue.value,
+      metricName: undefined,
+      dimension: undefined,
+    });
+  };
+
+  const onChangeMetricName = (selectableValue: SelectableValue) => {
+    onChange({
+      ...query,
+      metricName: selectableValue.value,
+      dimension: undefined,
+    });
+  };
+
+  const onChangeDimension = (selectableValue: SelectableValue) => {
+    onChange({
+      ...query,
+      dimension: selectableValue.value,
     });
   };
 
@@ -419,7 +504,7 @@ const VariableEditor = (props: Props) => {
           />
         </Field>
       )}
-      {requireCustomNamespace && (
+      {(requireCustomNamespace || hasCustomNamespace) && (
         <Field
           label={t('components.variable-editor.label-custom-namespace', 'Custom Namespace')}
           data-testid={selectors.components.variableEditor.customNamespace.input}
@@ -441,6 +526,34 @@ const VariableEditor = (props: Props) => {
             }
           />
         </Field>
+      )}
+      {query.queryType === AzureQueryType.DimensionValuesQuery && (
+        <>
+          <Field
+            label={t('components.variable-editor.label-metric-name', 'Metric Name')}
+            data-testid={selectors.components.variableEditor.metricName.input}
+          >
+            <Select
+              aria-label={t('components.variable-editor.aria-label-select-metric-name', 'Select metric name')}
+              onChange={onChangeMetricName}
+              options={metricNames.concat(variableOptionGroup)}
+              width={25}
+              value={query.metricName || null}
+            />
+          </Field>
+          <Field
+            label={t('components.variable-editor.label-dimension-name', 'Dimension Name')}
+            data-testid={selectors.components.variableEditor.dimension.input}
+          >
+            <Select
+              aria-label={t('components.variable-editor.aria-label-select-dimension-name', 'Select dimension name')}
+              onChange={onChangeDimension}
+              options={dimensions.concat(variableOptionGroup)}
+              width={25}
+              value={query.dimension || null}
+            />
+          </Field>
+        </>
       )}
       {query.queryType === AzureQueryType.AzureResourceGraph && (
         <>

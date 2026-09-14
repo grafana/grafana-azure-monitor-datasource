@@ -1,3 +1,7 @@
+## Unreleased
+
+- Add a Dimension Values template variable query type. Empty Azure results now replace stale variable values.
+
 ## 13.0.2
 
 - Bump backend Go dependencies to address CVEs in [#100](https://github.com/grafana/grafana-azure-monitor-datasource/pull/100)

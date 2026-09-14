@@ -116,6 +116,40 @@ export class VariableSupport extends CustomVariableSupport<DataSource, AzureMoni
               };
             }
             return { data: [] };
+          case AzureQueryType.DimensionValuesQuery:
+            if (
+              queryObj.subscription &&
+              queryObj.resourceGroup &&
+              queryObj.namespace &&
+              queryObj.resource &&
+              queryObj.metricName &&
+              queryObj.dimension &&
+              this.hasValue(
+                queryObj.subscription,
+                queryObj.resourceGroup,
+                queryObj.namespace,
+                queryObj.resource,
+                queryObj.metricName,
+                queryObj.dimension
+              )
+            ) {
+              const values = await this.datasource.getDimensionValues(
+                queryObj.subscription,
+                queryObj.resourceGroup,
+                queryObj.namespace,
+                queryObj.resource,
+                queryObj.metricName,
+                queryObj.dimension,
+                request.range,
+                queryObj.customNamespace
+              );
+              return {
+                // Return an explicit empty frame so Grafana replaces any options
+                // retained from a previous dashboard time range.
+                data: [toDataFrame(values)],
+              };
+            }
+            return { data: [] };
           case AzureQueryType.WorkspacesQuery:
             if (queryObj.subscription && this.hasValue(queryObj.subscription)) {
               const rgs = await this.datasource.getAzureLogAnalyticsWorkspaces(queryObj.subscription);
