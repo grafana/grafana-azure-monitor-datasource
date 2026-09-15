@@ -39,6 +39,7 @@ const VariableEditor = (props: Props) => {
     { label: 'Regions', value: AzureQueryType.LocationsQuery },
     { label: 'Resource Names', value: AzureQueryType.ResourceNamesQuery },
     { label: 'Metric Names', value: AzureQueryType.MetricNamesQuery },
+    { label: 'Dimensions', value: AzureQueryType.DimensionsQuery },
     { label: 'Dimension Values', value: AzureQueryType.DimensionValuesQuery },
     { label: 'Workspaces', value: AzureQueryType.WorkspacesQuery },
     { label: 'Resource Graph', value: AzureQueryType.AzureResourceGraph },
@@ -76,6 +77,8 @@ const VariableEditor = (props: Props) => {
   const [dimensions, setDimensions] = useState<SelectableValue[]>([]);
   const [errorMessage, setError] = useLastError();
   const queryType = typeof query === 'string' ? '' : query.queryType;
+  const hasMetricDimensionCascade =
+    queryType === AzureQueryType.DimensionsQuery || queryType === AzureQueryType.DimensionValuesQuery;
 
   useEffect(() => {
     migrateQuery(query, { datasource: datasource }).then((migratedQuery) => {
@@ -116,6 +119,7 @@ const VariableEditor = (props: Props) => {
         setRequireNamespace(true);
         setRequireResource(true);
         break;
+      case AzureQueryType.DimensionsQuery:
       case AzureQueryType.DimensionValuesQuery:
         setRequireSubscription(true);
         setRequireResourceGroup(true);
@@ -146,7 +150,7 @@ const VariableEditor = (props: Props) => {
     const options: AzureMonitorOption[] = [];
     datasource.getVariablesRaw().forEach((v) => {
       if (get(v, 'query.queryType') !== queryType) {
-        options.push({ label: v.label || v.name, value: `$${v.name}` });
+        options.push({ label: `$${v.name}`, value: `$${v.name}` });
       }
     });
     setVariableOptionGroup({
@@ -226,20 +230,27 @@ const VariableEditor = (props: Props) => {
 
   const customNamespace = (typeof query === 'object' && query.customNamespace) || '';
   const metricName = (typeof query === 'object' && query.metricName) || '';
-  // When subscription, resource group, namespace, and resource name are all set, retrieve metric names
+  // Metric names are only needed for Dimensions / Dimension Values cascade fields
   useEffect(() => {
-    if (subscription && resourceGroup && namespace && resource) {
+    if (hasMetricDimensionCascade && subscription && resourceGroup && namespace && resource) {
       datasource
         .getMetricNames(subscription, resourceGroup, namespace, resource, customNamespace || undefined)
         .then((metrics) => {
           setMetricNames(metrics.map((metric) => ({ label: metric.text, value: metric.value })));
         });
     }
-  }, [datasource, subscription, resourceGroup, namespace, resource, customNamespace]);
+  }, [datasource, hasMetricDimensionCascade, subscription, resourceGroup, namespace, resource, customNamespace]);
 
   // When a metric is also selected, retrieve the dimensions it supports
   useEffect(() => {
-    if (subscription && resourceGroup && namespace && resource && metricName) {
+    if (
+      queryType === AzureQueryType.DimensionValuesQuery &&
+      subscription &&
+      resourceGroup &&
+      namespace &&
+      resource &&
+      metricName
+    ) {
       datasource.azureMonitorDatasource
         .getMetricMetadata({
           subscription,
@@ -253,7 +264,7 @@ const VariableEditor = (props: Props) => {
           setDimensions(metadata.dimensions);
         });
     }
-  }, [datasource, subscription, resourceGroup, namespace, resource, customNamespace, metricName]);
+  }, [datasource, queryType, subscription, resourceGroup, namespace, resource, customNamespace, metricName]);
 
   if (typeof query === 'string') {
     // still migrating the query
@@ -285,7 +296,7 @@ const VariableEditor = (props: Props) => {
         resourceGroup: undefined,
         namespace: undefined,
         resource: undefined,
-        ...(queryType === AzureQueryType.DimensionValuesQuery && {
+        ...(hasMetricDimensionCascade && {
           customNamespace: undefined,
           metricName: undefined,
           dimension: undefined,
@@ -300,7 +311,7 @@ const VariableEditor = (props: Props) => {
       resourceGroup: selectableValue.value,
       namespace: undefined,
       resource: undefined,
-      ...(queryType === AzureQueryType.DimensionValuesQuery && {
+      ...(hasMetricDimensionCascade && {
         customNamespace: undefined,
         metricName: undefined,
         dimension: undefined,
@@ -313,7 +324,7 @@ const VariableEditor = (props: Props) => {
       ...query,
       namespace: selectableValue.value,
       resource: undefined,
-      ...(queryType === AzureQueryType.DimensionValuesQuery && {
+      ...(hasMetricDimensionCascade && {
         customNamespace: undefined,
         metricName: undefined,
         dimension: undefined,
@@ -332,7 +343,7 @@ const VariableEditor = (props: Props) => {
     onChange({
       ...query,
       resource: selectableValue.value,
-      ...(queryType === AzureQueryType.DimensionValuesQuery && {
+      ...(hasMetricDimensionCascade && {
         customNamespace: undefined,
         metricName: undefined,
         dimension: undefined,
@@ -527,7 +538,7 @@ const VariableEditor = (props: Props) => {
           />
         </Field>
       )}
-      {query.queryType === AzureQueryType.DimensionValuesQuery && (
+      {hasMetricDimensionCascade && (
         <>
           <Field
             label={t('components.variable-editor.label-metric-name', 'Metric Name')}
@@ -541,18 +552,20 @@ const VariableEditor = (props: Props) => {
               value={query.metricName || null}
             />
           </Field>
-          <Field
-            label={t('components.variable-editor.label-dimension-name', 'Dimension Name')}
-            data-testid={selectors.components.variableEditor.dimension.input}
-          >
-            <Select
-              aria-label={t('components.variable-editor.aria-label-select-dimension-name', 'Select dimension name')}
-              onChange={onChangeDimension}
-              options={dimensions.concat(variableOptionGroup)}
-              width={25}
-              value={query.dimension || null}
-            />
-          </Field>
+          {query.queryType === AzureQueryType.DimensionValuesQuery && (
+            <Field
+              label={t('components.variable-editor.label-dimension-name', 'Dimension Name')}
+              data-testid={selectors.components.variableEditor.dimension.input}
+            >
+              <Select
+                aria-label={t('components.variable-editor.aria-label-select-dimension-name', 'Select dimension name')}
+                onChange={onChangeDimension}
+                options={dimensions.concat(variableOptionGroup)}
+                width={25}
+                value={query.dimension || null}
+              />
+            </Field>
+          )}
         </>
       )}
       {query.queryType === AzureQueryType.AzureResourceGraph && (

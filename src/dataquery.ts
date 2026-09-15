@@ -33,7 +33,7 @@ export interface AzureMonitorQuery extends common.DataQuery {
    */
   customNamespace?: string;
   /**
-   * Dimension used in dimension value template variable queries
+   * Dimension used in template variable queries
    */
   dimension?: string;
   /**
@@ -42,7 +42,7 @@ export interface AzureMonitorQuery extends common.DataQuery {
   grafanaTemplateVariableFn?: GrafanaTemplateVariableQuery;
   keepCookies?: string[];
   /**
-   * Metric name used in dimension value template variable queries
+   * Metric name used in template variable queries
    */
   metricName?: string;
   /**
@@ -94,6 +94,7 @@ export enum AzureQueryType {
   AzureTraces = 'Azure Traces',
   CustomMetricNamesQuery = 'Azure Custom Metric Names',
   CustomNamespacesQuery = 'Azure Custom Namespaces',
+  DimensionsQuery = 'Azure Dimensions',
   DimensionValuesQuery = 'Azure Dimension Values',
   GrafanaTemplateVariableFn = 'Grafana Template Variable Function',
   LocationsQuery = 'Azure Regions',

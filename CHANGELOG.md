@@ -1,6 +1,7 @@
 ## Unreleased
 
-- Add a Dimension Values template variable query type. Empty Azure results now replace stale variable values.
+- Add Dimensions and Dimension Values template variable query types for chained metric dimension variables. Empty Azure results, and parent variables that interpolate empty, now replace stale variable values.
+- Display template variable references with their `$` prefix in the variable query editor.
 
 ## 13.0.2
 

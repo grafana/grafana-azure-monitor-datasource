@@ -257,7 +257,7 @@ describe('VariableEditor:', () => {
       );
     });
 
-    it('should show template variables as options ', async () => {
+    it('should show template variables with their query syntax as options', async () => {
       const onChange = jest.fn();
       const { rerender } = render(<VariableEditor {...defaultProps} onChange={onChange} />);
       // wait for initial load
@@ -266,13 +266,9 @@ describe('VariableEditor:', () => {
       // Select a subscription
       openMenu(screen.getByLabelText('Select subscription'));
       await waitFor(() => expect(screen.getByText('Primary Subscription')).toBeInTheDocument());
-      await userEvent.click(screen.getByText('Template Variables'));
-      // Simulate onChange behavior
-      const lastQuery = onChange.mock.calls.at(-1)[0];
-      rerender(<VariableEditor {...defaultProps} query={lastQuery} onChange={onChange} />);
-      await waitFor(() => expect(screen.getByText('query0')).toBeInTheDocument());
+      expect(screen.getByText('$sub0')).toBeInTheDocument();
       // Template variables of the same type than the current one should not appear
-      expect(screen.queryByText('query1')).not.toBeInTheDocument();
+      expect(screen.queryByText('$rg')).not.toBeInTheDocument();
     });
 
     it('should run the query if requesting namespaces', async () => {
@@ -329,6 +325,32 @@ describe('VariableEditor:', () => {
           refId: 'A',
         })
       );
+    });
+
+    it('shows the dimensions query type and metric cascade fields', async () => {
+      render(
+        <VariableEditor
+          {...defaultProps}
+          query={{
+            refId: 'A',
+            queryType: AzureQueryType.DimensionsQuery,
+            subscription: 'sub',
+            resourceGroup: 'rg',
+            namespace: 'foo/bar',
+            resource: 'foobar',
+          }}
+        />
+      );
+
+      openMenu(screen.getByLabelText('Select query type'));
+      expect((await screen.findAllByText('Dimensions')).length).toBeGreaterThan(0);
+      expect(screen.getByLabelText('Select subscription')).toBeInTheDocument();
+      expect(screen.getByLabelText('Select resource group')).toBeInTheDocument();
+      expect(screen.getByLabelText('Select namespace')).toBeInTheDocument();
+      expect(screen.getByLabelText('Select resource')).toBeInTheDocument();
+      expect(screen.getByLabelText('Select custom namespace')).toBeInTheDocument();
+      expect(screen.getByLabelText('Select metric name')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Select dimension name')).not.toBeInTheDocument();
     });
 
     it('shows the dimension values query type and required cascade fields', async () => {
@@ -388,10 +410,10 @@ describe('VariableEditor:', () => {
 
       openMenu(screen.getByLabelText('Select metric name'));
       expect((await screen.findAllByText('Requests')).length).toBeGreaterThan(0);
-      expect(screen.getByText('query0')).toBeInTheDocument();
+      expect(screen.getByText('$var0')).toBeInTheDocument();
       openMenu(screen.getByLabelText('Select dimension name'));
       expect(await screen.findByText('Cloud role')).toBeInTheDocument();
-      expect(screen.getAllByText('query0').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('$var0').length).toBeGreaterThan(0);
       expect(datasource.getMetricNames).toHaveBeenCalledWith('sub', 'rg', 'foo/bar', 'foobar', 'custom/ns');
       expect(datasource.azureMonitorDatasource.getMetricMetadata).toHaveBeenCalledWith({
         subscription: 'sub',
