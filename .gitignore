@@ -42,10 +42,6 @@ ci/
 /playwright/.cache/
 /playwright/.auth/
 
-# Local Azure credentials for running Grafana against a real tenant.
-# Never commit files matching this pattern.
-provisioning/datasources/*.local.yml
-
 # Editor
 .idea
 

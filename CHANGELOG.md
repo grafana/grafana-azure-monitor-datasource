@@ -1,7 +1,6 @@
 ## Unreleased
 
-- Add Dimensions and Dimension Values template variable query types for chained metric dimension variables. Empty Azure results, and parent variables that interpolate empty, now replace stale variable values.
-- Display template variable references with their `$` prefix in the variable query editor.
+- Add Dimensions and Dimension Values template variable query types in [#118](https://github.com/grafana/grafana-azure-monitor-datasource/pull/118)
 
 ## 13.0.2
 
