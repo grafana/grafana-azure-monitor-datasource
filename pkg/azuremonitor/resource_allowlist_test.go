@@ -48,10 +48,8 @@ func Test_isAllowedResourcePath_legitimateCalls(t *testing.T) {
 	}
 }
 
-// None
-// of these should ever reach the configured backend, regardless of the verb
-// used to try to smuggle them through, which mux prefix (route) is used to
-// reach the shared ARM identity, or how the path is cased/decorated.
+// None of these should ever reach the configured backend, regardless of
+// verb, route, or casing/decoration used to try to smuggle them through.
 func Test_isAllowedResourcePath_rejectsUnsupportedPaths(t *testing.T) {
 	dangerousARMActions := []string{
 		"listKeys",
@@ -125,12 +123,8 @@ func Test_isAllowedResourcePath_rejectsUnsupportedPaths(t *testing.T) {
 	}
 }
 
-// Raised in review: net/http.ServeMux only redirect-cleans a dot-segment
-// when it's literally present ("..") in the raw request target. A
-// percent-encoded one ("%2e%2e") decodes to ".." in req.URL.Path *without*
-// tripping that redirect (confirmed by probing net/http directly), so
-// isAllowedResourcePath cannot assume the mux has already screened these
-// out -- it must reject dot-segments and "%" itself.
+// See RESOURCE_PROXY.md: net/http.ServeMux doesn't catch a percent-encoded
+// dot-segment, so these must be rejected explicitly.
 func Test_isAllowedResourcePath_rejectsDotSegmentsAndEscaping(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -155,13 +149,8 @@ func Test_isAllowedResourcePath_rejectsDotSegmentsAndEscaping(t *testing.T) {
 	}
 }
 
-// End-to-end through the real mux (not just isAllowedResourcePath in
-// isolation): a request whose *raw* target contains a percent-encoded
-// dot-segment reaches handleResourceReq with a literal ".." in
-// req.URL.Path, bypassing net/http.ServeMux's own dot-segment redirect --
-// verified separately by probing net/http directly. The allowlist's
-// explicit dot-segment/"%" rejection is what actually stops this, not the
-// mux.
+// Same as above, but through the real mux/handler, not isAllowedResourcePath
+// in isolation.
 func Test_handleResourceReq_rejectsPercentEncodedTraversal(t *testing.T) {
 	var backendWasHit bool
 	mockARM := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -203,12 +192,8 @@ func Test_handleResourceReq_rejectsPercentEncodedTraversal(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, rw.Result().StatusCode)
 }
 
-// <resourceUri> comes from template variables, so
-// an empty or multi-value one can reach the handler as an empty path
-// segment ("/subscriptions//..."). The resourceUri wildcards below have to
-// allow "/" (a real resource ID spans several segments), so without an
-// explicit check an empty segment would pass just as readily as a
-// well-formed one.
+// See RESOURCE_PROXY.md: an empty/multi-value template variable can reach
+// the handler as an empty path segment.
 func Test_isAllowedResourcePath_rejectsEmptyPathSegments(t *testing.T) {
 	tests := []struct {
 		name string
@@ -228,14 +213,8 @@ func Test_isAllowedResourcePath_rejectsEmptyPathSegments(t *testing.T) {
 	}
 }
 
-// Raised in review: could the resource proxy just restrict every call to
-// GET, rather than allowlist by path? No -- two calls the datasource
-// actually makes are POST: the Resource Graph query (the entire
-// resourcePicker / subscription/resource-group/resource-name browsing UI
-// runs through this) and the Log Analytics basic-logs usage query. A
-// blanket GET-only restriction would break both of those real features,
-// which is why the fix allowlists (method, path) pairs per route instead of
-// a single global method restriction.
+// Not GET-only: the Resource Graph query (backs the whole resourcePicker)
+// and the Log Analytics basic-logs usage query are both legitimately POST.
 func Test_isAllowedResourcePath_cannotBeRestrictedToGETOnly(t *testing.T) {
 	postOnlyLegitimateCalls := []struct {
 		name          string
