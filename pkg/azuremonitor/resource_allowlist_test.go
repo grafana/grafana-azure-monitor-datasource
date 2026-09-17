@@ -123,8 +123,8 @@ func Test_isAllowedResourcePath_rejectsUnsupportedPaths(t *testing.T) {
 	}
 }
 
-// See RESOURCE_PROXY.md: net/http.ServeMux doesn't catch a percent-encoded
-// dot-segment, so these must be rejected explicitly.
+// net/http.ServeMux doesn't catch a percent-encoded dot-segment, so these
+// must be rejected explicitly.
 func Test_isAllowedResourcePath_rejectsDotSegmentsAndEscaping(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -192,8 +192,8 @@ func Test_handleResourceReq_rejectsPercentEncodedTraversal(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, rw.Result().StatusCode)
 }
 
-// See RESOURCE_PROXY.md: an empty/multi-value template variable can reach
-// the handler as an empty path segment.
+// An empty/multi-value template variable can reach the handler as an
+// empty path segment.
 func Test_isAllowedResourcePath_rejectsEmptyPathSegments(t *testing.T) {
 	tests := []struct {
 		name string
