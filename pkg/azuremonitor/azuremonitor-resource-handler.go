@@ -129,7 +129,7 @@ func (s *DataSource) handleResourceReq(subDataSource string) func(rw http.Respon
 		}
 
 		if !isAllowedResourcePath(subDataSource, req.Method, newPath) {
-			s.logger.Warn("Rejected resource call to a path the datasource does not support", "method", req.Method, "path", newPath, "subDataSource", subDataSource)
+			s.logger.Error("Rejected resource call to a path the datasource does not support", "method", req.Method, "path", newPath, "subDataSource", subDataSource)
 			writeErrorResponse(rw, http.StatusForbidden, "the requested resource path is not supported by this datasource")
 			return
 		}
