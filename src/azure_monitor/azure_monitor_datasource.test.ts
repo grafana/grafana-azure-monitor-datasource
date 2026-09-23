@@ -572,6 +572,29 @@ describe('AzureMonitorDatasource', () => {
         });
     });
 
+    it('does not add storage platform namespaces when custom is specified', async () => {
+      ctx.ds.azureMonitorDatasource.getResource = jest.fn().mockResolvedValue({
+        value: [
+          {
+            classification: 'Platform',
+            properties: { metricNamespaceName: 'microsoft.storage/storageaccounts' },
+          },
+        ],
+      });
+
+      const results = await ctx.ds.azureMonitorDatasource.getMetricNamespaces(
+        {
+          resourceUri:
+            '/subscriptions/mock-subscription-id/resourceGroups/nodeapp/providers/microsoft.storage/storageaccounts/resource1',
+        },
+        false,
+        undefined,
+        true
+      );
+
+      expect(results).toEqual([]);
+    });
+
     it('when excludeCustom is specified will omit custom namespaces', () => {
       // Use a fresh response so this test doesn't depend on mutations made by earlier tests.
       const freshResponse = {

@@ -248,7 +248,7 @@ export default class AzureMonitorDatasource extends DataSourceWithBackend<
         );
       })
       .then((result) => {
-        if (url.toLowerCase().includes('microsoft.storage/storageaccounts')) {
+        if (!custom && url.toLowerCase().includes('microsoft.storage/storageaccounts')) {
           const storageNamespaces = [
             'microsoft.storage/storageaccounts',
             'microsoft.storage/storageaccounts/blobservices',

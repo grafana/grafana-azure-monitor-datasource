@@ -144,17 +144,15 @@ export default class UrlBuilder {
       metricNamespace: query.metricNamespace,
       resourceName: query.resourceName,
     });
-    // A temporary origin lets URLSearchParams encode the datasource-relative URL safely.
-    const url = new URL('http://localhost');
-    url.pathname = `/${baseUrl}${resourceUri}/providers/microsoft.insights/metrics`;
-    url.searchParams.set('api-version', apiVersion);
-    url.searchParams.set('timespan', `${range.from.toISOString()}/${range.to.toISOString()}`);
-    url.searchParams.set('metricnames', query.metricName);
-    url.searchParams.set('metricnamespace', query.customNamespace || query.metricNamespace);
-    url.searchParams.set('resultType', 'metadata');
+    const searchParams = new URLSearchParams();
+    searchParams.set('api-version', apiVersion);
+    searchParams.set('timespan', `${range.from.toISOString()}/${range.to.toISOString()}`);
+    searchParams.set('metricnames', query.metricName);
+    searchParams.set('metricnamespace', query.customNamespace || query.metricNamespace);
+    searchParams.set('resultType', 'metadata');
     // Azure requires at least one dimension under eq for resultType=metadata.
-    url.searchParams.set('$filter', `${query.dimension.trim()} eq '*'`);
-    url.searchParams.set('top', '1000');
-    return url.href.slice(url.origin.length + 1);
+    searchParams.set('$filter', `${query.dimension.trim()} eq '*'`);
+    searchParams.set('top', '1000');
+    return `${baseUrl}${resourceUri}/providers/microsoft.insights/metrics?${searchParams}`;
   }
 }
