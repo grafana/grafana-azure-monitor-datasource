@@ -56,7 +56,7 @@
     {
       "id": "jsonData_interval",
       "key": "interval",
-      "description": "Default query interval reported to Grafana. Parsed by the backend into `AzureMonitorSettings`. Not rendered by the config editor.",
+      "description": "Default query interval reported to Grafana. Parsed by the backend into `AzureMonitorSettings`.",
       "valueType": "string",
       "target": "jsonData",
       "tags": ["backend-only"]
