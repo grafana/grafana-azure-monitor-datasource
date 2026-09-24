@@ -21,9 +21,14 @@ func TestLegacyTimeout(t *testing.T) {
 		assert.Nil(t, legacyTimeout(map[string]any{}))
 	})
 
-	t.Run("returns nil when timeout is zero or negative", func(t *testing.T) {
-		assert.Nil(t, legacyTimeout(map[string]any{"timeout": float64(0)}))
+	t.Run("returns nil when timeout is negative", func(t *testing.T) {
 		assert.Nil(t, legacyTimeout(map[string]any{"timeout": float64(-5)}))
+	})
+
+	t.Run("preserves an explicit zero instead of treating it as unset", func(t *testing.T) {
+		got := legacyTimeout(map[string]any{"timeout": float64(0)})
+		assert.NotNil(t, got)
+		assert.Equal(t, time.Duration(0), *got)
 	})
 
 	t.Run("returns the duration when timeout is set", func(t *testing.T) {
@@ -51,6 +56,16 @@ func TestResolveTimeout(t *testing.T) {
 		assert.Equal(t, defaultMetricsTimeout, resolveTimeout(types.RouteAzureMonitor, settings, nil))
 		assert.Equal(t, defaultMetricsTimeout, resolveTimeout(types.RouteAzureMonitorBatchMetrics, settings, nil))
 		assert.Equal(t, defaultResourceGraphTimeout, resolveTimeout(types.RouteAzureResourceGraph, settings, nil))
+	})
+
+	t.Run("preserves an explicit per-service zero instead of falling back to the default", func(t *testing.T) {
+		settings := types.AzureMonitorSettings{LogsTimeout: floatPtr(0)}
+		assert.Equal(t, time.Duration(0), resolveTimeout(types.RouteAzureLogAnalytics, settings, nil))
+	})
+
+	t.Run("preserves an explicit legacy zero instead of falling back to the default", func(t *testing.T) {
+		settings := types.AzureMonitorSettings{}
+		assert.Equal(t, time.Duration(0), resolveTimeout(types.RouteAzureLogAnalytics, settings, durationPtr(0)))
 	})
 
 	t.Run("resolves metrics and resource graph independently from logs", func(t *testing.T) {

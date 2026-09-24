@@ -19,7 +19,7 @@ func legacyTimeout(jsonData map[string]any) *time.Duration {
 		return nil
 	}
 	seconds, ok := v.(float64)
-	if !ok || seconds <= 0 {
+	if !ok || seconds < 0 {
 		return nil
 	}
 	d := time.Duration(seconds * float64(time.Second))
@@ -27,7 +27,7 @@ func legacyTimeout(jsonData map[string]any) *time.Duration {
 }
 
 func durationFromSeconds(seconds *float64) *time.Duration {
-	if seconds == nil || *seconds <= 0 {
+	if seconds == nil || *seconds < 0 {
 		return nil
 	}
 	d := time.Duration(*seconds * float64(time.Second))

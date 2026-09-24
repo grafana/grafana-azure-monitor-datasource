@@ -29,9 +29,7 @@ func newHTTPClient(ctx context.Context, route types.AzRoute, model types.Datasou
 		return nil, fmt.Errorf("error getting HTTP options: %w", err)
 	}
 
-	if timeout > 0 {
-		clientOpts.Timeouts.Timeout = timeout
-	}
+	clientOpts.Timeouts.Timeout = timeout
 
 	for header, value := range route.Headers {
 		clientOpts.Header.Add(header, value)

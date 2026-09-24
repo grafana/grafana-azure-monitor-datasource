@@ -98,14 +98,14 @@ func TestHttpClient_AzureCredentials(t *testing.T) {
 		assert.Equal(t, 45*time.Second, provider.opts.Timeouts.Timeout)
 	})
 
-	t.Run("should leave the SDK-resolved timeout untouched when zero is passed", func(t *testing.T) {
+	t.Run("should apply an explicit zero timeout rather than leaving the SDK default", func(t *testing.T) {
 		route := types.AzRoute{}
 
 		_, err := newHTTPClient(context.Background(), route, model, settings, azureSettings, provider, 0)
 		require.NoError(t, err)
 
 		require.NotNil(t, provider.opts.Timeouts)
-		assert.NotEqual(t, 45*time.Second, provider.opts.Timeouts.Timeout)
+		assert.Equal(t, time.Duration(0), provider.opts.Timeouts.Timeout)
 	})
 }
 
