@@ -6,11 +6,11 @@
         "type": "object",
         "properties": {
           "appInsightsAppId": {
-            "description": "Deprecated. App ID of the Application Insights resource still parsed by the backend (`pkg/azuremonitor/types/types.go:31` `AzureMonitorSettings.AppInsightsAppId`) for provisioned datasources migrated from the old Application Insights integration. The config editor no longer renders this field (Application Insights was folded into Log Analytics — see `docs/deprecated-application-insights/`).",
+            "description": "Deprecated. App ID of the Application Insights resource still parsed by the backend for provisioned datasources migrated from the old Application Insights integration. The config editor no longer renders this field (Application Insights was folded into Log Analytics).",
             "type": "string"
           },
           "azureAuthType": {
-            "description": "Legacy top-level auth-type field written by the pre-2023 Azure Monitor config editor before credentials were nested under `jsonData.azureCredentials`. Read by the backend legacy fallback in `pkg/azuremonitor/azmoncredentials/builder.go:34-56` (`getFromLegacy`) and by the frontend at `src/credentials.ts:40-57` when no `azureCredentials` object is present. `updateDatasourceCredentials` in `@grafana/azure-sdk` unsets this field whenever the editor saves.",
+            "description": "Legacy top-level auth-type field written by the pre-2023 Azure Monitor config editor before credentials were nested under `jsonData.azureCredentials`. Read by the backend legacy fallback and by the frontend when no `azureCredentials` object is present. `updateDatasourceCredentials` in `@grafana/azure-sdk` unsets this field whenever the editor saves.",
             "type": "string"
           },
           "azureCredentials": {
@@ -18,7 +18,7 @@
             "type": "object"
           },
           "azureLogAnalyticsSameAs": {
-            "description": "Deprecated. When set to `false`, the backend hard-fails Log Analytics queries with 'credentials for Log Analytics are no longer supported. Go to the data source configuration to update Azure Monitor credentials' (`pkg/azuremonitor/loganalytics/azure-log-analytics-datasource.go:415-432`). Accepts a bool or a string that `strconv.ParseBool` can parse.",
+            "description": "Deprecated. When set to `false`, the backend hard-fails Log Analytics queries with 'credentials for Log Analytics are no longer supported. Go to the data source configuration to update Azure Monitor credentials'. Accepts a bool or a string that `strconv.ParseBool` can parse.",
             "type": "boolean"
           },
           "basicLogsEnabled": {
@@ -27,7 +27,7 @@
             "default": false
           },
           "batchAPIEnabled": {
-            "description": "Use the Azure Monitor batch metrics endpoint for multi-resource metric queries. Only takes effect when Grafana has the `azureMonitorBatchAPI` feature toggle enabled — the frontend gates on it in `src/azure_monitor/azure_monitor_datasource.ts:76` and the backend in `pkg/azuremonitor/metrics/azuremonitor-datasource.go:103,117`.",
+            "description": "Use the Azure Monitor batch metrics endpoint for multi-resource metric queries. Only takes effect when Grafana has the `azureMonitorBatchAPI` feature toggle enabled.",
             "type": "boolean",
             "default": false
           },
@@ -36,25 +36,25 @@
             "type": "string"
           },
           "cloudName": {
-            "description": "Legacy Azure cloud discriminator (values `azuremonitor` / `chinaazuremonitor` / `govazuremonitor` / `customizedazuremonitor`). Read by `pkg/azuremonitor/azmoncredentials/builder.go:126-142` `resolveLegacyCloudName` and by `resolveLegacyCloudName` in `@grafana/azure-sdk` (`src/clouds.ts:32-47`). Also gates `customizedRoutes` — `azureCloud == 'AzureCustomizedCloud'` (derived from `cloudName == 'customizedazuremonitor'`) is the only way the backend consults `jsonData.customizedRoutes`.",
+            "description": "Legacy Azure cloud discriminator (values `azuremonitor` / `chinaazuremonitor` / `govazuremonitor` / `customizedazuremonitor`). Read by the backend's `resolveLegacyCloudName` and by `resolveLegacyCloudName` in `@grafana/azure-sdk`. Also gates `customizedRoutes` — `azureCloud == 'AzureCustomizedCloud'` (derived from `cloudName == 'customizedazuremonitor'`) is the only way the backend consults `jsonData.customizedRoutes`.",
             "type": "string"
           },
           "customizedRoutes": {
-            "description": "Map of route name → `{ URL, Scopes, Headers }` overriding the default Azure Monitor / Log Analytics / Resource Graph endpoints. Only consulted by the backend when the resolved cloud is `AzureCustomizedCloud` (`pkg/azuremonitor/routes.go:31-37,93-106`). Not rendered by the config editor — configured via provisioning YAML.",
+            "description": "Map of route name → `{ URL, Scopes, Headers }` overriding the default Azure Monitor / Log Analytics / Resource Graph endpoints. Only consulted by the backend when the resolved cloud is `AzureCustomizedCloud`. Not rendered by the config editor — configured via provisioning YAML.",
             "type": "object",
             "additionalProperties": true
           },
           "disableGrafanaCache": {
-            "description": "Set to `true` by `@grafana/azure-sdk`'s `updateDatasourceCredentials` when `currentuser` authentication is selected (`grafana-azure-sdk-react/src/credentials/AzureCredentialsConfig.ts:424`) to prevent user-scoped results from leaking across users. No editor UI.",
+            "description": "Set to `true` by `@grafana/azure-sdk`'s `updateDatasourceCredentials` when `currentuser` authentication is selected, to prevent user-scoped results from leaking across users. No editor UI.",
             "type": "boolean"
           },
           "enableSecureSocksProxy": {
-            "description": "Route data source requests through Grafana's Secure Socks Proxy. Rendered by `@grafana/ui`'s `SecureSocksProxySettings` in `src/components/ConfigEditor/ConfigEditor.tsx:122`, and only when the Grafana instance has `secureSocksDSProxyEnabled`.",
+            "description": "Route data source requests through Grafana's Secure Socks Proxy. Rendered by `@grafana/ui`'s `SecureSocksProxySettings`, and only when the Grafana instance has `secureSocksDSProxyEnabled`.",
             "type": "boolean",
             "default": false
           },
           "interval": {
-            "description": "Default query interval reported to Grafana. Parsed by the backend into `AzureMonitorSettings` (`pkg/azuremonitor/types/types.go:82`). Not rendered by the config editor.",
+            "description": "Default query interval reported to Grafana. Parsed by the backend into `AzureMonitorSettings`.",
             "type": "string"
           },
           "keepCookies": {
@@ -65,19 +65,19 @@
             }
           },
           "logAnalyticsClientId": {
-            "description": "Deprecated. Legacy Log Analytics client ID. Marked `@deprecated` in `src/types/types.ts:41`. Frontend-only (no backend reader).",
+            "description": "Deprecated. Legacy Log Analytics client ID. Marked `@deprecated`. Frontend-only (no backend reader).",
             "type": "string"
           },
           "logAnalyticsDefaultWorkspace": {
-            "description": "Deprecated. Default Log Analytics workspace, still parsed by the backend (`pkg/azuremonitor/types/types.go:30` `AzureMonitorSettings.LogAnalyticsDefaultWorkspace`) for legacy datasources. Marked `@deprecated` in `src/types/types.ts:45`.",
+            "description": "Deprecated. Default Log Analytics workspace, still parsed by the backend for legacy datasources. Marked `@deprecated`.",
             "type": "string"
           },
           "logAnalyticsSubscriptionId": {
-            "description": "Deprecated. Legacy Log Analytics subscription ID. Marked `@deprecated` in `src/types/types.ts:43`. Frontend-only (no backend reader).",
+            "description": "Deprecated. Legacy Log Analytics subscription ID. Marked `@deprecated`. Frontend-only (no backend reader).",
             "type": "string"
           },
           "logAnalyticsTenantId": {
-            "description": "Deprecated. Legacy Log Analytics tenant ID. Marked `@deprecated` in `src/types/types.ts:39`. Frontend-only (no backend reader).",
+            "description": "Deprecated. Legacy Log Analytics tenant ID. Marked `@deprecated`. Frontend-only (no backend reader).",
             "type": "string"
           },
           "oauthPassThru": {
@@ -118,7 +118,7 @@
     },
     {
       "key": "clientSecret",
-      "description": "Legacy client secret key. Preserved for backward compatibility with datasources provisioned before the credential migration to `azureClientSecret`. The backend reads it as a fallback when `secureJsonData.azureClientSecret` is missing (grafana-azure-sdk-go v2 `azcredentials/builder.go` `getFromCredentialsObject` case `clientsecret` and `clientsecret-obo`, and the plugin's own `azmoncredentials/builder.go` `getFromLegacy`)."
+      "description": "Legacy client secret key. Preserved for backward compatibility with datasources provisioned before the credential migration to `azureClientSecret`. The backend reads it as a fallback when `secureJsonData.azureClientSecret` is missing."
     },
     {
       "key": "password",
@@ -126,7 +126,7 @@
     },
     {
       "key": "appInsightsApiKey",
-      "description": "Deprecated. Application Insights API key preserved on migrated datasources. Present in `src/types/types.ts:56` (`AzureMonitorDataSourceSecureJsonData.appInsightsApiKey`); no editor UI renders it, and the backend no longer authenticates against Application Insights directly."
+      "description": "Deprecated. Application Insights API key preserved on migrated datasources. No editor UI renders it, and the backend no longer authenticates against Application Insights directly."
     }
   ]
 }
