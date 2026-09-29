@@ -223,7 +223,7 @@ export const ConfigEditor = memo(function ConfigEditor(props: Props) {
                 min={0}
                 placeholder={t('components.config-editor.placeholder-logs-timeout', '180')}
                 aria-label={t('components.config-editor.aria-label-logs-timeout', 'Logs timeout in seconds')}
-                value={options.jsonData.logsTimeout}
+                value={options.jsonData.logsTimeout ?? ''}
                 onChange={onTimeoutFieldChange('logsTimeout')}
               />
             </InlineField>
@@ -244,7 +244,7 @@ export const ConfigEditor = memo(function ConfigEditor(props: Props) {
                 min={0}
                 placeholder={t('components.config-editor.placeholder-metrics-timeout', '30')}
                 aria-label={t('components.config-editor.aria-label-metrics-timeout', 'Metrics timeout in seconds')}
-                value={options.jsonData.metricsTimeout}
+                value={options.jsonData.metricsTimeout ?? ''}
                 onChange={onTimeoutFieldChange('metricsTimeout')}
               />
             </InlineField>
@@ -268,7 +268,7 @@ export const ConfigEditor = memo(function ConfigEditor(props: Props) {
                   'components.config-editor.aria-label-resource-graph-timeout',
                   'Resource Graph timeout in seconds'
                 )}
-                value={options.jsonData.resourceGraphTimeout}
+                value={options.jsonData.resourceGraphTimeout ?? ''}
                 onChange={onTimeoutFieldChange('resourceGraphTimeout')}
               />
             </InlineField>
