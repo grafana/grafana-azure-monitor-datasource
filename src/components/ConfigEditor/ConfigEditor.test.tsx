@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 
 import { getBackendSrv } from '@grafana/runtime';
 
@@ -75,6 +75,28 @@ describe('AppInsights ConfigEditor', () => {
     expect(screen.getByLabelText('Logs timeout in seconds')).toBeInTheDocument();
     expect(screen.getByLabelText('Metrics timeout in seconds')).toBeInTheDocument();
     expect(screen.getByLabelText('Resource Graph timeout in seconds')).toBeInTheDocument();
+  });
+
+  it('should accept a typed timeout value', () => {
+    const options = { ...baseOptions, jsonData: { ...jsonData, logsTimeout: 10 } };
+    render(<ConfigEditor options={options} onOptionsChange={onOptionsChange} />);
+
+    fireEvent.change(screen.getByLabelText('Logs timeout in seconds'), { target: { value: '200' } });
+
+    expect(onOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({ jsonData: expect.objectContaining({ logsTimeout: 200 }) })
+    );
+  });
+
+  it('should clear the timeout instead of saving NaN when the input is invalid', () => {
+    const options = { ...baseOptions, jsonData: { ...jsonData, logsTimeout: 180 } };
+    render(<ConfigEditor options={options} onOptionsChange={onOptionsChange} />);
+
+    fireEvent.change(screen.getByLabelText('Logs timeout in seconds'), { target: { value: '-5' } });
+
+    expect(onOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({ jsonData: expect.objectContaining({ logsTimeout: undefined }) })
+    );
   });
 
   it('should migrate the legacy timeout into all three fields and auto-save, once', () => {

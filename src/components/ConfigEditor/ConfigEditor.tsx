@@ -101,7 +101,9 @@ export const ConfigEditor = memo(function ConfigEditor(props: Props) {
 
   function onTimeoutFieldChange(field: 'logsTimeout' | 'metricsTimeout' | 'resourceGraphTimeout') {
     return (event: ChangeEvent<HTMLInputElement>) => {
-      const value = event.currentTarget.value === '' ? undefined : parseInt(event.currentTarget.value, 10);
+      const raw = event.currentTarget.value;
+      const parsed = Number(raw);
+      const value = raw === '' || !Number.isFinite(parsed) || parsed < 0 ? undefined : parsed;
       updateOptions((options) => ({
         ...options,
         jsonData: {
