@@ -58,9 +58,9 @@ export const ConfigEditor = memo(function ConfigEditor(props: Props) {
       ...options,
       jsonData: {
         ...jsonData,
-        logsTimeout: jsonData.logsTimeout ?? options.jsonData.timeout,
-        metricsTimeout: jsonData.metricsTimeout ?? options.jsonData.timeout,
-        resourceGraphTimeout: jsonData.resourceGraphTimeout ?? options.jsonData.timeout,
+        logsTimeout: jsonData.logsTimeout ?? timeout,
+        metricsTimeout: jsonData.metricsTimeout ?? timeout,
+        resourceGraphTimeout: jsonData.resourceGraphTimeout ?? timeout,
       },
     };
 
