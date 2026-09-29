@@ -34,6 +34,7 @@ type AzRoute struct {
 	URL     string
 	Scopes  []string
 	Headers map[string]string
+	Timeout time.Duration
 }
 
 type AzureMonitorSettings struct {

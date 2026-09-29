@@ -43,7 +43,7 @@ func TestHttpClient_AzureCredentials(t *testing.T) {
 			Scopes: []string{"https://management.azure.com/.default"},
 		}
 
-		_, err := newHTTPClient(context.Background(), route, model, settings, azureSettings, provider, 0)
+		_, err := newHTTPClient(context.Background(), route, model, settings, azureSettings, provider)
 		require.NoError(t, err)
 
 		require.NotNil(t, provider.opts)
@@ -56,7 +56,7 @@ func TestHttpClient_AzureCredentials(t *testing.T) {
 			Scopes: []string{},
 		}
 
-		_, err := newHTTPClient(context.Background(), route, model, settings, azureSettings, provider, 0)
+		_, err := newHTTPClient(context.Background(), route, model, settings, azureSettings, provider)
 		require.NoError(t, err)
 
 		assert.NotNil(t, provider.opts)
@@ -77,7 +77,7 @@ func TestHttpClient_AzureCredentials(t *testing.T) {
 			"Grafanaheader": {"GrafanaValue"},
 			"Azureheader":   {"AzureValue"},
 		}
-		_, err := newHTTPClient(context.Background(), route, model, settings, azureSettings, provider, 0)
+		_, err := newHTTPClient(context.Background(), route, model, settings, azureSettings, provider)
 		require.NoError(t, err)
 
 		assert.NotNil(t, provider.opts)
@@ -89,9 +89,9 @@ func TestHttpClient_AzureCredentials(t *testing.T) {
 	})
 
 	t.Run("should override client timeout when a positive timeout is passed", func(t *testing.T) {
-		route := types.AzRoute{}
+		route := types.AzRoute{Timeout: 45 * time.Second}
 
-		_, err := newHTTPClient(context.Background(), route, model, settings, azureSettings, provider, 45*time.Second)
+		_, err := newHTTPClient(context.Background(), route, model, settings, azureSettings, provider)
 		require.NoError(t, err)
 
 		require.NotNil(t, provider.opts.Timeouts)
@@ -101,7 +101,7 @@ func TestHttpClient_AzureCredentials(t *testing.T) {
 	t.Run("should apply an explicit zero timeout rather than leaving the SDK default", func(t *testing.T) {
 		route := types.AzRoute{}
 
-		_, err := newHTTPClient(context.Background(), route, model, settings, azureSettings, provider, 0)
+		_, err := newHTTPClient(context.Background(), route, model, settings, azureSettings, provider)
 		require.NoError(t, err)
 
 		require.NotNil(t, provider.opts.Timeouts)
