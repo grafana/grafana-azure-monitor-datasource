@@ -36,18 +36,21 @@ func durationFromSeconds(seconds *float64) *time.Duration {
 
 // resolveTimeout returns the effective HTTP client timeout for a route. New
 // per-service settings take precedence, falling back to the deprecated shared
-// "timeout" setting, then to a per-service default. Routes not covered by
-// logs/metrics/resource graph return 0, meaning "no override" - the caller
-// should keep using whatever settings.HTTPClientOptions already resolved.
+// "timeout" setting, then to a per-service default.
+//
+// Traces and TraceExemplar share the Logs timeout: both routes resolve to the
+// same logAnalyticsRoute and are served by the same AzureLogAnalyticsDatasource
+// executor as Azure Log Analytics (see routes.go), so they're the same
+// underlying query for timeout purposes.
 func resolveTimeout(routeName string, settings types.AzureMonitorSettings, legacy *time.Duration) time.Duration {
 	var perService *time.Duration
 	var fallbackDefault time.Duration
 
 	switch routeName {
-	case types.RouteAzureLogAnalytics:
+	case types.RouteAzureLogAnalytics, types.RouteAzureTraces, types.RouteTraceExemplar:
 		perService = durationFromSeconds(settings.LogsTimeout)
 		fallbackDefault = defaultLogsTimeout
-	case types.RouteAzureMonitor, types.RouteAzureMonitorBatchMetrics:
+	case types.RouteAzureMonitor, types.RouteAzureMonitorBatchMetrics, types.RouteAzurePortal:
 		perService = durationFromSeconds(settings.MetricsTimeout)
 		fallbackDefault = defaultMetricsTimeout
 	case types.RouteAzureResourceGraph:

@@ -174,6 +174,19 @@ export const ConfigEditor = memo(function ConfigEditor(props: Props) {
         >
           <ConfigSubSection
             title={t('components.config-editor.title-advanced-http-settings', 'Advanced HTTP settings')}
+            description={
+              <>
+                {t(
+                  'components.config-editor.description-advanced-http-settings-logs',
+                  'Logs and Traces queries use the Logs timeout.'
+                )}
+                <br />
+                {t(
+                  'components.config-editor.description-advanced-http-settings-metrics',
+                  'Metrics and Azure Portal links use the Metrics timeout.'
+                )}
+              </>
+            }
           >
             <InlineField
               htmlFor="advanced-http-cookies"
@@ -199,7 +212,7 @@ export const ConfigEditor = memo(function ConfigEditor(props: Props) {
               labelWidth={24}
               tooltip={t(
                 'components.config-editor.tooltip-logs-timeout',
-                'HTTP request timeout for Logs queries, in seconds. Default: 180s (3 minutes).'
+                'HTTP request timeout for Logs and Traces queries, in seconds. Default: 180s (3 minutes).'
               )}
               disabled={options.readOnly}
               grow
@@ -220,7 +233,7 @@ export const ConfigEditor = memo(function ConfigEditor(props: Props) {
               labelWidth={24}
               tooltip={t(
                 'components.config-editor.tooltip-metrics-timeout',
-                'HTTP request timeout for Metrics queries, in seconds. Default: 30s'
+                'HTTP request timeout for Metrics queries, in seconds. Also used when building Azure Portal links. Default: 30s'
               )}
               disabled={options.readOnly}
               grow
