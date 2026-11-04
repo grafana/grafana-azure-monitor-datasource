@@ -1,3 +1,7 @@
+## 13.0.7
+
+- Fix code editor syntax highlighter
+
 ## 13.0.6
 
 - Update backend dependencies
@@ -6,8 +10,6 @@
 ## 13.0.5
 
 - Bump backend dependency
-
-- Fix code editor syntax highlighter
 
 ## 13.0.4
 
