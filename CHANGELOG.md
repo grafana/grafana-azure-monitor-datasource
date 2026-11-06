@@ -1,3 +1,6 @@
+## Unreleased
+- Add support for workload identity credentials (tenant and client ID), and backend assertion support when workload in memory is enabled
+
 ## 13.0.7
 
 - Fix code editor syntax highlighter
