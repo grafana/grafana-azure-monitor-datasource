@@ -18,6 +18,7 @@ var allowedResourcePaths = map[string][]struct {
 	azureMonitor: {
 		{http.MethodGet, regexp.MustCompile(`^/subscriptions$`)},
 		{http.MethodGet, regexp.MustCompile(`^/subscriptions/[^/%]+/locations$`)},
+		{http.MethodGet, regexp.MustCompile(`(?i)^/subscriptions/[^/%]+/providers/microsoft\.cloudhealth/healthmodels$`)},
 		{http.MethodGet, regexp.MustCompile(`(?i)^/subscriptions/[^/%]+/providers/microsoft\.operationalinsights/workspaces$`)},
 		{http.MethodGet, regexp.MustCompile(`(?i)^/subscriptions/[^%]+/providers/microsoft\.insights/metricnamespaces$`)},
 		{http.MethodGet, regexp.MustCompile(`(?i)^/subscriptions/[^%]+/providers/microsoft\.insights/metricdefinitions$`)},
