@@ -1,3 +1,4 @@
+import { OpenFeatureTestProvider } from '@openfeature/react-sdk';
 import { render, screen, waitFor, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
@@ -6,6 +7,7 @@ import { config, reportInteraction } from '@grafana/runtime';
 
 import { AzureQueryType, LogsEditorMode } from '../../dataquery';
 import { selectors } from '../../e2e/selectors';
+import { HEALTH_MODELS_FLAG, OPEN_FEATURE_DOMAIN } from '../../featureFlags';
 import createMockQuery from '../../mocks/query';
 import { type AzureMonitorQuery } from '../../types/query';
 import { selectOptionInTest } from '../../utils/testUtils';
@@ -21,16 +23,24 @@ describe('Azure Monitor QueryHeader', () => {
   const setAzureLogsCheatSheetModalOpen = jest.fn();
   const onRunQuery = jest.fn();
 
-  const renderComponent = (query: AzureMonitorQuery, props?: Partial<React.ComponentProps<typeof QueryHeader>>) => {
+  const renderComponent = (
+    query: AzureMonitorQuery,
+    props?: Partial<React.ComponentProps<typeof QueryHeader>> & { healthModelsEnabled?: boolean }
+  ) => {
     return render(
-      <QueryHeader
-        query={query}
-        onQueryChange={props?.onQueryChange ?? jest.fn()}
-        setAzureLogsCheatSheetModalOpen={setAzureLogsCheatSheetModalOpen}
-        data={props?.data}
-        onRunQuery={onRunQuery}
-        app={props?.app}
-      />
+      <OpenFeatureTestProvider
+        domain={OPEN_FEATURE_DOMAIN}
+        flagValueMap={{ [HEALTH_MODELS_FLAG]: props?.healthModelsEnabled ?? false }}
+      >
+        <QueryHeader
+          query={query}
+          onQueryChange={props?.onQueryChange ?? jest.fn()}
+          setAzureLogsCheatSheetModalOpen={setAzureLogsCheatSheetModalOpen}
+          data={props?.data}
+          onRunQuery={onRunQuery}
+          app={props?.app}
+        />
+      </OpenFeatureTestProvider>
     );
   };
 
@@ -73,6 +83,34 @@ describe('Azure Monitor QueryHeader', () => {
         queryType: AzureQueryType.LogAnalytics,
       })
     );
+  });
+
+  it('offers Health Models and updates the query when its feature flag is enabled', async () => {
+    const query = createMockQuery();
+    const onQueryChange = jest.fn();
+
+    renderComponent(query, { onQueryChange, healthModelsEnabled: true });
+
+    const serviceSelect = await screen.findByLabelText(/Service/i);
+    await selectOptionInTest(serviceSelect, 'Health Models');
+
+    await waitFor(() =>
+      expect(onQueryChange).toHaveBeenCalledWith({
+        ...query,
+        queryType: AzureQueryType.AzureHealthModels,
+      })
+    );
+  });
+
+  it('does not offer Health Models when its feature flag is disabled', async () => {
+    const user = userEvent.setup();
+
+    renderComponent(createMockQuery());
+
+    await user.click(await screen.findByLabelText(/Service/i));
+
+    expect(await screen.findByText('Logs')).toBeInTheDocument();
+    expect(screen.queryByText('Health Models')).not.toBeInTheDocument();
   });
 
   it('initializes logs editor mode to Raw when a raw query exists and builder is enabled', async () => {
