@@ -193,7 +193,8 @@ describe('HealthModelsQueryEditor', () => {
     );
   });
 
-  it('does not overwrite an already-selected health model when it is still present in the fetched list', async () => {
+  it.each(['hm-2', 'missing-model'])('does not overwrite the selected health model (%s)', async (modelName) => {
+    const user = userEvent.setup();
     const getSubscriptions = jest.fn().mockResolvedValue([{ text: 'Subscription A', value: 'sub-a' }]);
     const getHealthModels = jest.fn().mockResolvedValue([
       { text: 'Health Model 1', value: '/subscriptions/sub-a/providers/Microsoft.CloudHealth/healthmodels/hm-1' },
@@ -207,13 +208,15 @@ describe('HealthModelsQueryEditor', () => {
       subscription: 'sub-a',
     });
     query.azureHealthModels = {
-      healthModelResourceId: '/subscriptions/sub-a/providers/Microsoft.CloudHealth/healthmodels/hm-2',
+      healthModelResourceId: `/subscriptions/sub-a/providers/Microsoft.CloudHealth/healthmodels/${modelName}`,
       queryType: AzureHealthModelsQueryType.EntityHealthHistory,
     };
 
     render(<HealthModelsQueryEditor query={query} datasource={datasource} onChange={onChange} setError={setError} />);
 
     await waitFor(() => expect(getHealthModels).toHaveBeenCalledWith('sub-a'));
+    await user.click(screen.getByRole('combobox', { name: 'Azure Monitor Health Model' }));
+    expect(await screen.findByRole('option', { name: /Health Model 1/ })).toBeInTheDocument();
     expect(onChange).not.toHaveBeenCalled();
   });
 

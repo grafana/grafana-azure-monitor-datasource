@@ -137,11 +137,7 @@ const HealthModelsQueryEditor = ({
 
   useEffect(() => {
     const topHealthModelResourceId = healthModels[0]?.value;
-    if (!topHealthModelResourceId || !selectedSubscription) {
-      return;
-    }
-
-    if (selectedHealthModelResourceId && healthModels.some((model) => model.value === selectedHealthModelResourceId)) {
+    if (!topHealthModelResourceId || !selectedSubscription || selectedHealthModelResourceId) {
       return;
     }
 
