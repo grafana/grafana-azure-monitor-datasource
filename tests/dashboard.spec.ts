@@ -18,7 +18,8 @@ import {
   type AzureMonitorDataSourceSecureJsonData,
 } from '../src/types/types';
 
-const provisioningPath = 'provisioning/datasources/azmonitor-ds.yaml';
+const isCloudRun = !!process.env.GRAFANA_URL;
+const provisioningPath = 'provisioning/datasources/datasources.yml';
 
 type AzureMonitorConfig = {
   secureJsonData: AzureMonitorDataSourceSecureJsonData;
@@ -79,17 +80,15 @@ test.describe(
     let datasourceConfig: AzureMonitorConfig;
 
     test.beforeAll(async () => {
-      // Check if we're running in CI
-      const CI = process.env.CI;
-      if (CI) {
-        const outputs = JSON.parse(readFileSync('/tmp/outputs.json', 'utf8'));
+      // Check if we're running in Cloud cron workflow
+      if (isCloudRun) {
         datasourceConfig = {
           jsonData: {
             cloudName: 'Azure',
-            tenantId: outputs.tenantId,
-            clientId: outputs.clientId,
+            tenantId: process.env.DS_TENANT_ID,
+            clientId: process.env.DS_CLIENT_ID,
           },
-          secureJsonData: { clientSecret: outputs.clientSecret },
+          secureJsonData: { clientSecret: process.env.DS_CLIENT_SECRET },
         };
       } else {
         const yamlContent = readFileSync(provisioningPath, 'utf8');
@@ -97,6 +96,12 @@ test.describe(
         const yaml = load(yamlContent) as AzureMonitorProvision;
         datasourceConfig = yaml.datasources[0];
       }
+      const credsProvided =
+        !!datasourceConfig?.jsonData?.tenantId &&
+        !!datasourceConfig?.jsonData?.clientId &&
+        !!datasourceConfig?.secureJsonData?.clientSecret;
+      const credsSource = isCloudRun ? 'environment' : 'provisioning file';
+      test.skip(!credsProvided, `Azure Monitor credentials were not provided in the ${credsSource}.`);
     });
 
     test('create dashboard, add panel for metrics, log analytics, ARG, and traces queries', async ({
