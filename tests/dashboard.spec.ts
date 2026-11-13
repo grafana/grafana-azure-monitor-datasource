@@ -108,7 +108,16 @@ test.describe(
         const yamlContent = readFileSync(provisioningPath, 'utf8');
         // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
         const yaml = load(yamlContent) as AzureMonitorProvision;
-        datasourceConfig = yaml.datasources[0];
+        const ds = yaml.datasources[0];
+        const creds = ds?.jsonData?.azureCredentials as AzureClientSecretCredentials | undefined;
+        datasourceConfig = {
+          jsonData: {
+            cloudName: 'Azure',
+            tenantId: creds?.tenantId,
+            clientId: creds?.clientId,
+          },
+          secureJsonData: { clientSecret: ds?.secureJsonData?.clientSecret },
+        };
       }
       const credsProvided =
         !!datasourceConfig?.jsonData?.tenantId &&
