@@ -265,18 +265,29 @@ func checkAzureLogAnalyticsHealth(ctx context.Context, dsInfo types.DatasourceIn
 	if err != nil {
 		return nil, err
 	}
-	res, err := dsInfo.Services["Azure Monitor"].HTTPClient.Do(workspacesReq)
+	workspacesRes, err := dsInfo.Services["Azure Monitor"].HTTPClient.Do(workspacesReq)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", types.ErrorAzureHealthCheck, err)
+	}
+	defer func() { _ = workspacesRes.Body.Close() }()
+	if workspacesRes.StatusCode != http.StatusOK {
+		body, err := io.ReadAll(workspacesRes.Body)
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("error listing Log Analytics workspaces: %s", body)
 	}
 	var target struct {
 		Value []types.LogAnalyticsWorkspaceResponse
 	}
-	err = json.NewDecoder(res.Body).Decode(&target)
+	err = json.NewDecoder(workspacesRes.Body).Decode(&target)
 	if err != nil {
 		return nil, err
 	}
 
+	if target.Value == nil {
+		return nil, errors.New("workspace list response is missing value")
+	}
 	if len(target.Value) == 0 {
 		return nil, errors.New("no default workspace found")
 	}
@@ -296,7 +307,7 @@ func checkAzureLogAnalyticsHealth(ctx context.Context, dsInfo types.DatasourceIn
 		return nil, err
 	}
 
-	res, err = dsInfo.Services["Azure Log Analytics"].HTTPClient.Do(workspaceReq)
+	res, err := dsInfo.Services["Azure Log Analytics"].HTTPClient.Do(workspaceReq)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", types.ErrorAzureHealthCheck, err)
 	}
@@ -361,11 +372,13 @@ func metricCheckHealth(ctx context.Context, dsInfo types.DatasourceInfo, logger 
 	return "Successfully connected to Azure Monitor endpoint.", defaultSubscription, backend.HealthStatusOk
 }
 
+const noLogAnalyticsWorkspacesMessage = "No Log Analytics workspaces found."
+
 func logAnalyticsCheckHealth(ctx context.Context, dsInfo types.DatasourceInfo, defaultSubscription string) (message string, status backend.HealthStatus) {
 	logsRes, err := checkAzureLogAnalyticsHealth(ctx, dsInfo, defaultSubscription)
 	if err != nil {
 		if err.Error() == "no default workspace found" {
-			return "No Log Analytics workspaces found.", backend.HealthStatusUnknown
+			return noLogAnalyticsWorkspacesMessage, backend.HealthStatusOk
 		}
 		if ok := errors.Is(err, types.ErrorAzureHealthCheck); ok {
 			return fmt.Sprintf("Error connecting to Azure Log Analytics endpoint: %s", err.Error()), backend.HealthStatusUnknown
@@ -437,9 +450,13 @@ func (ds *DataSource) CheckHealth(ctx context.Context, req *backend.CheckHealthR
 	}
 
 	if status == backend.HealthStatusOk {
+		message := "Successfully connected to all Azure Monitor endpoints."
+		if logAnalyticsLog == noLogAnalyticsWorkspacesMessage {
+			message = "Successfully connected to Azure Monitor and Azure Resource Graph endpoints. " + noLogAnalyticsWorkspacesMessage
+		}
 		return &backend.CheckHealthResult{
 			Status:  status,
-			Message: "Successfully connected to all Azure Monitor endpoints.",
+			Message: message,
 		}, nil
 	}
 
