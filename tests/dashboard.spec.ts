@@ -2,6 +2,7 @@ import { readFileSync } from 'fs';
 import { load } from 'js-yaml';
 import { type Page } from 'playwright-core';
 
+import { type AzureClientSecretCredentials } from '@grafana/azure-sdk';
 import {
   type CreateDataSourcePageArgs,
   type DashboardPage,
@@ -33,6 +34,18 @@ const storageAcctName = 'azmonteststorage';
 const logAnalyticsName = 'az-mon-test-logs';
 const applicationInsightsName = 'az-mon-test-ai-a';
 const rootSubscription = 'grafanalabs-datasources-dev';
+
+function readCredentials(): Partial<AzureClientSecretCredentials> | undefined {
+  const raw = process.env.DS_INSTANCE_CREDENTIALS;
+  if (!raw) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new Error('DS_INSTANCE_CREDENTIALS is not valid JSON.');
+  }
+}
 
 async function provisionAzureMonitorDatasources(
   createDataSourceConfigPage: (args: CreateDataSourcePageArgs) => Promise<DataSourceConfigPage>,
@@ -82,13 +95,14 @@ test.describe(
     test.beforeAll(async () => {
       // Check if we're running in Cloud cron workflow
       if (isCloudRun) {
+        const credentials = readCredentials();
         datasourceConfig = {
           jsonData: {
             cloudName: 'Azure',
-            tenantId: process.env.DS_TENANT_ID,
-            clientId: process.env.DS_CLIENT_ID,
+            tenantId: credentials?.tenantId,
+            clientId: credentials?.clientId,
           },
-          secureJsonData: { clientSecret: process.env.DS_CLIENT_SECRET },
+          secureJsonData: { clientSecret: process.env.DS_INSTANCE_CLIENT_SECRET },
         };
       } else {
         const yamlContent = readFileSync(provisioningPath, 'utf8');
