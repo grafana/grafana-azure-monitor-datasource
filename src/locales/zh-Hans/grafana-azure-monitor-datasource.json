@@ -190,6 +190,15 @@
       "label-group-by": "分组依据",
       "tooltip-group-by": "根据指定的列将结果整理成不同类别。可以单独使用“按组排列”列出所选列中的唯一值，也可以与汇总函数结合使用，生成每个组的汇总统计数据。单独使用时，它会返回指定列的不同组合。"
     },
+    "health-models-query-editor": {
+      "aria-label-health-model": "",
+      "aria-label-subscription": "",
+      "aria-label-type": "",
+      "label-health-model": "",
+      "label-subscription": "",
+      "label-type": "",
+      "no-health-models-found": ""
+    },
     "kql-preview": {
       "button-hide": "隐藏",
       "button-show": "显示",

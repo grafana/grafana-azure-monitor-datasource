@@ -190,6 +190,15 @@
       "label-group-by": "Gruppera efter",
       "tooltip-group-by": "Organisera resultat i kategorier baserat på angivna kolumner. Gruppera efter kan användas fristående för att lista unika värden i valda kolumner, eller kombineras med aggregeringsfunktioner för att skapa sammanfattande statistik för varje grupp. Vid fristående användning returnerar den unika kombinationer av de angivna kolumnerna."
     },
+    "health-models-query-editor": {
+      "aria-label-health-model": "",
+      "aria-label-subscription": "",
+      "aria-label-type": "",
+      "label-health-model": "",
+      "label-subscription": "",
+      "label-type": "",
+      "no-health-models-found": ""
+    },
     "kql-preview": {
       "button-hide": "Dölj",
       "button-show": "Visa",

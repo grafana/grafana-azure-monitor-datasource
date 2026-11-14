@@ -190,6 +190,15 @@
       "label-group-by": "Regrouper par",
       "tooltip-group-by": "Organisez les résultats en catégories en fonction des colonnes spécifiées. La fonction « Regrouper par » peut être utilisée de manière indépendante pour répertorier les valeurs uniques dans les colonnes sélectionnées, ou combinée avec des fonctions d’agrégation pour produire des statistiques récapitulatives pour chaque groupe. Lorsqu’elle est utilisée seule, elle renvoie des combinaisons distinctes des colonnes spécifiées."
     },
+    "health-models-query-editor": {
+      "aria-label-health-model": "",
+      "aria-label-subscription": "",
+      "aria-label-type": "",
+      "label-health-model": "",
+      "label-subscription": "",
+      "label-type": "",
+      "no-health-models-found": ""
+    },
     "kql-preview": {
       "button-hide": "Masquer",
       "button-show": "Afficher",

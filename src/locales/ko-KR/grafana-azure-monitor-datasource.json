@@ -190,6 +190,15 @@
       "label-group-by": "그룹화 기준",
       "tooltip-group-by": "지정된 열을 기준으로 결과를 카테고리별로 분류합니다. 그룹화 기준은 선택한 열의 고유 값을 나열하는 데 독립적으로 사용하거나 집계 함수와 결합하여 각 그룹에 대한 요약 통계를 생성하는 데 사용할 수 있습니다. 단독으로 사용하면 지정된 열의 고유한 조합을 반환합니다."
     },
+    "health-models-query-editor": {
+      "aria-label-health-model": "",
+      "aria-label-subscription": "",
+      "aria-label-type": "",
+      "label-health-model": "",
+      "label-subscription": "",
+      "label-type": "",
+      "no-health-models-found": ""
+    },
     "kql-preview": {
       "button-hide": "숨기기",
       "button-show": "표시",
