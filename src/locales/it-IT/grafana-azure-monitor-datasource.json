@@ -190,6 +190,15 @@
       "label-group-by": "Raggruppa per",
       "tooltip-group-by": "Organizza i risultati in categorie in base alle colonne specificate. Raggruppa per può essere utilizzato in modo indipendente per elencare valori univoci nelle colonne selezionate o può essere combinato con funzioni di aggregazione per produrre statistiche di riepilogo per ciascun gruppo. Se usato da solo, restituisce combinazioni distinte delle colonne specificate."
     },
+    "health-models-query-editor": {
+      "aria-label-health-model": "",
+      "aria-label-subscription": "",
+      "aria-label-type": "",
+      "label-health-model": "",
+      "label-subscription": "",
+      "label-type": "",
+      "no-health-models-found": ""
+    },
     "kql-preview": {
       "button-hide": "Nascondi",
       "button-show": "Mostra",

@@ -190,6 +190,15 @@
       "label-group-by": "Agrupar por",
       "tooltip-group-by": "Organize os resultados em categorias com base em colunas especificadas. A opção agrupar por pode ser utilizada de forma independente para listar valores únicos em colunas selecionadas ou combinada com funções agregadas para produzir estatísticas resumidas para cada grupo. Quando utilizada sozinha, devolve combinações distintas das colunas especificadas."
     },
+    "health-models-query-editor": {
+      "aria-label-health-model": "",
+      "aria-label-subscription": "",
+      "aria-label-type": "",
+      "label-health-model": "",
+      "label-subscription": "",
+      "label-type": "",
+      "no-health-models-found": ""
+    },
     "kql-preview": {
       "button-hide": "Ocultar",
       "button-show": "Mostrar",

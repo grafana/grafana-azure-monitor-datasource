@@ -190,6 +190,15 @@
       "label-group-by": "グループ化",
       "tooltip-group-by": "指定された列に基づいて結果をカテゴリに整理します。グループ化は、選択した列の一意の値を一覧表示するために単独で使用できるほか、各グループの要約統計を生成するために集計関数と組み合わせて使用することもできます。単独で使用した場合、指定された列の異なる組み合わせが返されます。"
     },
+    "health-models-query-editor": {
+      "aria-label-health-model": "",
+      "aria-label-subscription": "",
+      "aria-label-type": "",
+      "label-health-model": "",
+      "label-subscription": "",
+      "label-type": "",
+      "no-health-models-found": ""
+    },
     "kql-preview": {
       "button-hide": "非表示",
       "button-show": "表示",
