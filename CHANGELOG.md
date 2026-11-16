@@ -6,6 +6,7 @@
 
 ## Unreleased
 - Add support for workload identity credentials (tenant and client ID), and backend assertion support when workload in memory is enabled
+- Fix out-of-memory crashes when a Log Analytics time series result is too large for a wide frame, and return the table with a warning instead
 
 ## 13.0.7
 
