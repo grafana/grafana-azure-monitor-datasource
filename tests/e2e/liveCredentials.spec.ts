@@ -146,10 +146,6 @@ const STORAGE_ACCOUNT = 'datasourcesazmone2e';
 const LOG_ANALYTICS_WORKSPACE = 'datasources-log-analytics';
 const APPLICATION_INSIGHTS = 'datasources-app-insights';
 
-const RESOURCE_PICKER_RESET_REASON =
-  'The resource picker drops typed Advanced values until ' +
-  'https://github.com/grafana/grafana-azure-monitor-datasource/pull/174 merges';
-
 interface VariableOptions {
   subscription?: string;
   resourceGroup?: string;
@@ -352,7 +348,6 @@ test.describe('Azure Monitor datasource', () => {
     selectors,
   }) => {
     test.fail(isCloudRun, CLOUD_VERSION_CONFLICT_REASON);
-    test.fail(true, RESOURCE_PICKER_RESET_REASON);
     test.setTimeout(120_000);
     uid = await createLiveDataSource(createDataSource);
     await configureLiveDataSourceInConfigEditor(uid, gotoDataSourceConfigPage, page, selectors);
