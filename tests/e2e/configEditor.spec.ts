@@ -12,8 +12,11 @@ import {
   PROVISIONED_FILE,
   fillClientSecretCredentials,
   isCloudRun,
+  mockHealthCheck,
   mockSubscriptions,
+  saveAndTest,
   selectClientSecretAuth,
+  waitForSave,
 } from './helpers';
 
 const { configEditor } = components;
@@ -153,9 +156,14 @@ test.describe('Config editor', () => {
         PLACEHOLDER_CLIENT_ID,
         'placeholder-client-secret'
       );
-      await configPage.mockHealthCheckResponse({ status: 'ERROR', message: 'mocked health check failure' }, 400);
+      await mockHealthCheck(
+        page,
+        configPage.datasource.uid,
+        { status: 'ERROR', message: 'mocked health check failure' },
+        400
+      );
 
-      await configPage.saveAndTest();
+      await saveAndTest(page, configPage.datasource.uid);
       await expect(configPage).toHaveAlert('error', { hasText: 'mocked health check failure' });
     });
 
@@ -174,7 +182,7 @@ test.describe('Config editor', () => {
         'placeholder-client-secret'
       );
 
-      const response = await configPage.saveAndTest();
+      const response = await saveAndTest(page, dataSource.uid);
       expect(response.ok()).toBe(false);
       await expect(configPage).toHaveAlert('error', { hasText: 'One or more health checks failed' });
     });
@@ -195,11 +203,9 @@ test.describe('Config editor', () => {
       await expect(page.getByTestId(configEditor.defaultSubscription.input)).toContainText(
         PLACEHOLDER_SUBSCRIPTION.displayName
       );
-      await configPage.mockHealthCheckResponse({ status: 'OK', message: 'mocked health check success' });
+      await mockHealthCheck(page, configPage.datasource.uid, { status: 'OK', message: 'mocked health check success' });
 
-      const saveResponse = page.waitForResponse(
-        (response) => response.request().method() === 'PUT' && /\/api\/datasources\/uid\//.test(response.url())
-      );
+      const saveResponse = waitForSave(page, configPage.datasource.uid);
       await page.getByRole('button', { name: 'Save & test' }).click();
       expect((await saveResponse).status()).toBe(200);
       await expect(configPage).toHaveAlert('success', { hasText: 'mocked health check success' });

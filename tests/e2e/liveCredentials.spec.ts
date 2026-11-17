@@ -22,6 +22,8 @@ import {
   fillClientSecretCredentials,
   isCloudRun,
   readLiveCredentials,
+  saveAndTest,
+  waitForSave,
 } from './helpers';
 
 // A trace records typed form values and API request bodies, so these tests never write one.
@@ -81,7 +83,7 @@ test.describe('Config editor', () => {
           credentials?.clientSecret ?? ''
         );
 
-        const response = await configPage.saveAndTest();
+        const response = await saveAndTest(page, dataSource.uid);
         expect(response.ok()).toBe(true);
         await expect(configPage).toHaveAlert('success', {
           hasText: 'Successfully connected to all Azure Monitor endpoints.',
@@ -185,9 +187,7 @@ const configureLiveDataSourceInConfigEditor = async (
   await page.getByTestId(configEditor.defaultSubscription.input).locator('input').fill('datasources');
   await configPage.getByGrafanaSelector(selectors.components.Select.option).filter({ hasText: 'datasources' }).click();
 
-  const saveResponse = page.waitForResponse(
-    (response) => response.request().method() === 'PUT' && /\/api\/datasources\/uid\//.test(response.url())
-  );
+  const saveResponse = waitForSave(page, uid);
   await page.getByRole('button', { name: 'Save & test' }).click();
   expect((await saveResponse).status()).toBe(200);
   await expect(configPage).toHaveAlert('success');

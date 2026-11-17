@@ -76,6 +76,35 @@ export const fillClientSecretCredentials = async (
   await page.getByRole('textbox', { name: 'Client Secret' }).fill(clientSecret);
 };
 
+// Cloud stacks can save and health-check a data source through the datasource API server instead of /api/datasources.
+const dataSourcePath = (uid: string) =>
+  `(?:/api/datasources/uid/|/apis/[^/]+/v0alpha1/namespaces/[^/]+/datasources/)${uid}`;
+const saveUrl = (uid: string) => new RegExp(`${dataSourcePath(uid)}(?:\\?|$)`);
+const healthUrl = (uid: string) => new RegExp(`${dataSourcePath(uid)}/health(?:\\?|$)`);
+
+/** Waits for the PUT that saves the data source. */
+export const waitForSave = (page: Page, uid: string) =>
+  page.waitForResponse((response) => response.request().method() === 'PUT' && saveUrl(uid).test(response.url()));
+
+/** Clicks Save & test and returns the health check response. */
+export const saveAndTest = async (page: Page, uid: string) => {
+  const save = waitForSave(page, uid);
+  const health = page.waitForResponse((response) => healthUrl(uid).test(response.url()));
+  await page.getByRole('button', { name: 'Save & test' }).click();
+  await save;
+  return health;
+};
+
+/** Answers the health check of the data source with the given result. */
+export const mockHealthCheck = async (
+  page: Page,
+  uid: string,
+  result: { status: 'OK' | 'ERROR'; message: string },
+  status = 200
+) => {
+  await page.route(healthUrl(uid), (route) => route.fulfill({ json: result, status }));
+};
+
 const SUBSCRIPTIONS_URL = /\/resources\/azuremonitor\/subscriptions\b/;
 
 /** Answers the subscriptions resource call with the placeholder subscription, or with an ARM error. */
