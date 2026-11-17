@@ -125,7 +125,7 @@ const DATA_SOURCE_NAME = `Azure Monitor E2E Tests - ${crypto.randomUUID()}`;
 const ROOT_SUBSCRIPTION = 'grafanalabs-datasources-dev';
 // The infra/data-sources Pulumi stack in grafana/data-sources manages these resources.
 const RESOURCE_GROUP = 'datasources-instance-rg';
-const REGION = 'east us 2';
+const REGION = 'East US 2';
 const STORAGE_ACCOUNT = 'datasourcesazmone2e';
 const LOG_ANALYTICS_WORKSPACE = 'datasources-log-analytics';
 const APPLICATION_INSIGHTS = 'datasources-app-insights';
@@ -249,8 +249,12 @@ const setVariableValue = async (
     .locator('..')
     .locator('input');
   await input.fill(value);
-  await input.press('ArrowDown');
-  await input.press('Enter');
+  // The picker also lists the typed text as a custom value, and that option sets the label, not the value.
+  await dashboardPage
+    .getByGrafanaSelector(selectors.components.Select.option)
+    .filter({ hasNotText: 'Hit enter to add' })
+    .getByText(value, { exact: true })
+    .click();
 };
 
 test.describe('Azure Monitor datasource', () => {
