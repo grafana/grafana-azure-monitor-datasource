@@ -35,7 +35,7 @@ test.describe('Logs query builder', () => {
     await expect(page.getByRole('radio', { name: 'KQL' })).toBeChecked();
 
     await page.getByRole('radio', { name: 'Builder' }).click();
-    await expect(page.getByRole('dialog', { name: 'Switch editor mode?' })).toBeVisible();
+    await expect(page.getByRole('dialog').filter({ hasText: 'Switch editor mode?' })).toBeVisible();
     await page.getByRole('button', { name: 'Switch to Builder' }).click();
 
     await expect(page.getByRole('radio', { name: 'Builder' })).toBeChecked();
