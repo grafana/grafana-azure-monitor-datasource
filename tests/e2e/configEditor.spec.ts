@@ -5,6 +5,7 @@ import type { AzureMonitorDataSourceJsonData, AzureMonitorDataSourceSecureJsonDa
 
 import {
   CLIENT_SECRET_DATA_SOURCE,
+  CLOUD_VERSION_CONFLICT_REASON,
   PLACEHOLDER_CLIENT_ID,
   PLACEHOLDER_SUBSCRIPTION,
   PLACEHOLDER_TENANT_ID,
@@ -191,6 +192,7 @@ test.describe('Config editor', () => {
       createDataSourceConfigPage,
       page,
     }) => {
+      test.fail(isCloudRun, CLOUD_VERSION_CONFLICT_REASON);
       await mockSubscriptions(page);
       const configPage = await createDataSourceConfigPage({ type: PLUGIN_TYPE });
       await fillClientSecretCredentials(

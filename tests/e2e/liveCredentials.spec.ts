@@ -15,6 +15,7 @@ import { components } from '../../src/e2e/selectors';
 
 import {
   CLIENT_SECRET_DATA_SOURCE,
+  CLOUD_VERSION_CONFLICT_REASON,
   LIVE_CREDENTIALS_SKIP_REASON,
   PLUGIN_TYPE,
   QUERY_DATA_URL,
@@ -144,10 +145,6 @@ const REGION = 'East US 2';
 const STORAGE_ACCOUNT = 'datasourcesazmone2e';
 const LOG_ANALYTICS_WORKSPACE = 'datasources-log-analytics';
 const APPLICATION_INSIGHTS = 'datasources-app-insights';
-
-const CLOUD_VERSION_CONFLICT_REASON =
-  'Save & test after Load Subscriptions fails with a version conflict on the Cloud instance until it runs a ' +
-  'release with https://github.com/grafana/grafana-azure-monitor-datasource/pull/137';
 
 const RESOURCE_PICKER_RESET_REASON =
   'The resource picker drops typed Advanced values until ' +

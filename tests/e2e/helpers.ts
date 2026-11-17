@@ -124,6 +124,10 @@ export interface LiveCredentials {
   clientSecret: string;
 }
 
+export const CLOUD_VERSION_CONFLICT_REASON =
+  'Save & test after Load Subscriptions fails with a version conflict on the Cloud instance until it runs a ' +
+  'release with https://github.com/grafana/grafana-azure-monitor-datasource/pull/137';
+
 export const LIVE_CREDENTIALS_SKIP_REASON =
   'Requires DS_INSTANCE_TENANT_ID, DS_INSTANCE_CLIENT_ID and DS_INSTANCE_CLIENT_SECRET';
 
