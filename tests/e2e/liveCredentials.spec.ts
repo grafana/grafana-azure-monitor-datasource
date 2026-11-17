@@ -23,6 +23,7 @@ import {
 } from './helpers';
 
 // A trace records typed form values and API request bodies, so these tests never write one.
+// A failure still writes error-context.md, and its ARIA snapshot can hold the Client Secret, so never upload test-results/.
 test.use({ trace: 'off' });
 
 const credentials = readLiveCredentials();
