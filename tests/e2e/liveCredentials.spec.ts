@@ -376,10 +376,11 @@ test.describe('Azure Monitor datasource', () => {
       .locator('..')
       .locator('input')
       .click();
-    await dashboardPage
+    const rootSubscriptionOption = dashboardPage
       .getByGrafanaSelector(selectors.components.Select.option)
-      .filter({ hasText: ROOT_SUBSCRIPTION })
-      .click();
+      .filter({ hasText: ROOT_SUBSCRIPTION });
+    await expect(rootSubscriptionOption).toBeVisible({ timeout: 30_000 });
+    await rootSubscriptionOption.click();
     await setVariableValue(dashboardPage, selectors, 'resourceGroups', RESOURCE_GROUP);
     await setVariableValue(dashboardPage, selectors, 'namespaces', 'microsoft.storage/storageaccounts');
     await setVariableValue(dashboardPage, selectors, 'region', REGION);
