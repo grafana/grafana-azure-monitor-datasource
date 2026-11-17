@@ -16,9 +16,9 @@ import {
   LIVE_CREDENTIALS_SKIP_REASON,
   PLUGIN_TYPE,
   QUERY_DATA_URL,
-  VERSION_CONFLICT_FAIL_REASON,
   exploreUrl,
   fillClientSecretCredentials,
+  isCloudRun,
   readLiveCredentials,
 } from './helpers';
 
@@ -128,6 +128,10 @@ const REGION = 'east us 2';
 const STORAGE_ACCOUNT = 'datasourcesazmone2e';
 const LOG_ANALYTICS_WORKSPACE = 'datasources-log-analytics';
 const APPLICATION_INSIGHTS = 'datasources-app-insights';
+
+const CLOUD_VERSION_CONFLICT_REASON =
+  'Save & test after Load Subscriptions fails with a version conflict on the Cloud instance until it runs a ' +
+  'release with https://github.com/grafana/grafana-azure-monitor-datasource/pull/137';
 
 interface VariableOptions {
   subscription?: string;
@@ -255,7 +259,7 @@ test.describe('Azure Monitor datasource', () => {
     selectors,
     page,
   }) => {
-    test.fail(true, VERSION_CONFLICT_FAIL_REASON);
+    test.fail(isCloudRun, CLOUD_VERSION_CONFLICT_REASON);
     test.setTimeout(120_000);
     await createLiveDataSourceInConfigEditor(createDataSourceConfigPage, page, selectors);
     const dashboardPage = await gotoDashboardPage({
@@ -311,7 +315,7 @@ test.describe('Azure Monitor datasource', () => {
     page,
     selectors,
   }) => {
-    test.fail(true, VERSION_CONFLICT_FAIL_REASON);
+    test.fail(isCloudRun, CLOUD_VERSION_CONFLICT_REASON);
     test.setTimeout(120_000);
     await createLiveDataSourceInConfigEditor(createDataSourceConfigPage, page, selectors);
     const dashboardPage = await gotoDashboardPage({ timeRange: { from: 'now-6h', to: 'now' } });

@@ -9,7 +9,6 @@ import {
   PLACEHOLDER_TENANT_ID,
   PLUGIN_TYPE,
   PROVISIONED_FILE,
-  VERSION_CONFLICT_FAIL_REASON,
   fillClientSecretCredentials,
   isCloudRun,
   mockSubscriptions,
@@ -169,7 +168,6 @@ test.describe('Config editor', () => {
       createDataSourceConfigPage,
       page,
     }) => {
-      test.fail(true, VERSION_CONFLICT_FAIL_REASON);
       await mockSubscriptions(page);
       const configPage = await createDataSourceConfigPage({ type: PLUGIN_TYPE });
       await fillClientSecretCredentials(
