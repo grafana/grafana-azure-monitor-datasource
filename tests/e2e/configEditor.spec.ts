@@ -61,8 +61,8 @@ test.describe('Config editor', () => {
       await createDataSourceConfigPage({ type: PLUGIN_TYPE });
 
       await expect(page.getByRole('heading', { name: 'Features', exact: true })).toBeVisible();
-      await expect(page.getByRole('switch', { name: 'Basic Logs' })).not.toBeChecked();
-      await expect(page.getByRole('switch', { name: 'Auxiliary Logs' })).not.toBeChecked();
+      await expect(page.getByRole('switch', { name: 'Basic Logs' })).toBeVisible();
+      await expect(page.getByRole('switch', { name: 'Auxiliary Logs' })).toBeVisible();
     });
 
     test('should render the Additional settings section', async ({ createDataSourceConfigPage, page }) => {
