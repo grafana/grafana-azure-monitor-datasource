@@ -10,8 +10,6 @@ import pluginJson from './plugin.json';
 // plugin-scoped domain to stay isolated from Grafana core and other plugins.
 export const OPEN_FEATURE_DOMAIN = pluginJson.id;
 
-// Registered in pkg/services/featuremgmt/registry.go.
-export const BATCH_API_FLAG = 'datasources.azureMonitorBatchAPI';
 export const HEALTH_MODELS_FLAG = 'grafana-azure-monitor-datasource.health-models';
 
 // This deployment-managed flag is not part of Grafana's generated flag-key types.
@@ -63,18 +61,6 @@ export function initFeatureFlags(): void {
       );
     }
   }
-}
-
-/**
- * Synchronous read of the Metrics Batch API flag.
- */
-export function isBatchAPIFlagEnabled(): boolean {
-  return OpenFeature.getClient(OPEN_FEATURE_DOMAIN).getBooleanValue(BATCH_API_FLAG, true);
-}
-
-/** React hook for the flag; re-renders when the provider (re)initializes. */
-export function useBatchAPIFlag(): boolean {
-  return useBooleanFlagValue(BATCH_API_FLAG, true);
 }
 
 export function useHealthModelsFlag(): boolean {

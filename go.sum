@@ -180,8 +180,6 @@ github.com/olekukonko/ll v0.1.9 h1:7twe+xnE6CSlfOlvGj0Finwnvr3CgWt25W33yuWNI6k=
 github.com/olekukonko/ll v0.1.9/go.mod h1:RPRC6UcscfFZgjo1nulkfMH5IM0QAYim0LfnMvUuozw=
 github.com/olekukonko/tablewriter v1.1.5 h1:4LoZSfMySpMQY3PT8RWJsJeuEuMIoo9xGRgvmqjg6IQ=
 github.com/olekukonko/tablewriter v1.1.5/go.mod h1:+kedxuyTtgoZLwif3P1Em4hARJs+mVnzKxmsCL/C5RY=
-github.com/open-feature/go-sdk v1.20.0 h1:cQV15LaPAQi1bLEoR2KHlzVxm6UuEqrohJ7qXVq+ZAk=
-github.com/open-feature/go-sdk v1.20.0/go.mod h1:lnLzUUPhw3J9gfj1utYmc7vXG9eM0apShLvr/rGAyCs=
 github.com/patrickmn/go-cache v2.1.0+incompatible h1:HRMgzkcYKYpi3C8ajMPV8OFXaaRUnok+kx1WdO15EQc=
 github.com/patrickmn/go-cache v2.1.0+incompatible/go.mod h1:3Qf8kWWT7OJRJbdiICTKqZju1ZixQ/KpMGzzAfe6+WQ=
 github.com/pierrec/lz4/v4 v4.1.33 h1:GjG1TJ1V4IzKP8L96muuuDNpTwd7D+l2ccXrjAbe014=
@@ -269,8 +267,6 @@ go.opentelemetry.io/proto/otlp v1.11.1 h1:SCrPqH9NE5CmBrOqpjNCiT0X5mGwMyGERXdogf
 go.opentelemetry.io/proto/otlp v1.11.1/go.mod h1:wq8W4aSf6bOy8RZyESOeQFr9Pu7wydWX/TY4sgvrTPg=
 go.uber.org/goleak v1.3.0 h1:2K3zAYmnTNqV73imy9J1T3WC+gmCePx2hEGkimedGto=
 go.uber.org/goleak v1.3.0/go.mod h1:CoHD4mav9JJNrW/WLlf7HGZPjdw8EucARQHekz1X6bE=
-go.uber.org/mock v0.6.0 h1:hyF9dfmbgIX5EfOdasqLsWD6xqpNZlXblLB/Dbnwv3Y=
-go.uber.org/mock v0.6.0/go.mod h1:KiVJ4BqZJaMj4svdfmHM0AUx4NJYO8ZNpPnZn1Z+BBU=
 go.yaml.in/yaml/v2 v2.4.4 h1:tuyd0P+2Ont/d6e2rl3be67goVK4R6deVxCUX5vyPaQ=
 go.yaml.in/yaml/v2 v2.4.4/go.mod h1:gMZqIpDtDqOfM0uNfy0SkpRhvUryYH0Z6wdMYcacYXQ=
 go.yaml.in/yaml/v3 v3.0.5 h1:N6y/pJk8buWs9NY5ERU2HSMfm+IuD/OtfdAnq6kESPw=

@@ -6,7 +6,7 @@ import { ConfigEditor } from './components/ConfigEditor/ConfigEditor';
 import AzureMonitorQueryEditor from './components/QueryEditor/QueryEditor';
 import { AzureQueryType, ResultFormat } from './dataquery';
 import Datasource from './datasource';
-import { initFeatureFlags, isBatchAPIFlagEnabled } from './featureFlags';
+import { initFeatureFlags } from './featureFlags';
 import pluginJson from './plugin.json';
 import { trackAzureMonitorDashboardLoaded } from './tracking';
 import { type AzureMonitorQuery } from './types/query';
@@ -33,8 +33,7 @@ interface Statistics {
 
 // queryUsesBatchAPI reports whether a metrics query targets a datasource with
 // the Metrics Batch API setting enabled, i.e. whether it will execute via the
-// batch path when the feature flag is on (callers check the flag once per
-// dashboard, not per query). Settings resolve synchronously from bootstrap
+// batch path. Settings resolve synchronously from bootstrap
 // config, so provisioned datasources are included — which config-editor
 // interactions alone cannot capture.
 function queryUsesBatchAPI(query: AzureMonitorQuery): boolean {
@@ -95,16 +94,13 @@ getAppEvents().subscribe<DashboardLoadedEvent<AzureMonitorQuery>>(
       unknown: { ...common },
     };
 
-    // Evaluated once per dashboard load; the flag cannot change mid-loop.
-    const batchAPIFlagEnabled = isBatchAPIFlagEnabled();
-
     azureQueries.forEach((query) => {
       if (query.queryType === AzureQueryType.AzureMonitor) {
         stats[AzureQueryType.AzureMonitor][query.hide ? 'hidden' : 'visible']++;
         if (query.azureMonitor?.resources && query.azureMonitor.resources.length > 1) {
           stats[AzureQueryType.AzureMonitor].multiResource++;
         }
-        if (batchAPIFlagEnabled && queryUsesBatchAPI(query)) {
+        if (queryUsesBatchAPI(query)) {
           stats[AzureQueryType.AzureMonitor].batchAPI++;
         }
       }

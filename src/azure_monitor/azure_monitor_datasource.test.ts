@@ -4,7 +4,6 @@ import { dateTime, type ScopedVars } from '@grafana/data';
 import { type VariableInterpolation } from '@grafana/runtime';
 
 import AzureMonitorDatasource from '../datasource';
-import { isBatchAPIFlagEnabled } from '../featureFlags';
 import createMockQuery from '../mocks/query';
 import { createTemplateVariables } from '../mocks/utils';
 import { multiVariable } from '../mocks/variables';
@@ -34,12 +33,6 @@ jest.mock('@grafana/runtime', () => {
   };
 });
 
-jest.mock('../featureFlags', () => ({
-  initFeatureFlags: jest.fn(),
-  isBatchAPIFlagEnabled: jest.fn().mockReturnValue(false),
-  useBatchAPIFlag: jest.fn().mockReturnValue(false),
-}));
-
 interface TestContext {
   instanceSettings: AzureMonitorDataSourceInstanceSettings;
   ds: AzureMonitorDatasource;
@@ -50,8 +43,6 @@ describe('AzureMonitorDatasource', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    // clearAllMocks does not restore return values; reset so a per-test mockReturnValue(true) cannot leak
-    jest.mocked(isBatchAPIFlagEnabled).mockReturnValue(false);
     ctx.instanceSettings = {
       name: 'test',
       url: 'http://azuremonitor.com',
@@ -60,7 +51,7 @@ describe('AzureMonitorDatasource', () => {
     ctx.ds = new AzureMonitorDatasource(ctx.instanceSettings);
   });
 
-  describe('batch API constructor gating', () => {
+  describe('batch API setting', () => {
     const settingsWithBatch = () =>
       ({
         name: 'test',
@@ -68,20 +59,12 @@ describe('AzureMonitorDatasource', () => {
         jsonData: { subscriptionId: 'mock-subscription-id', cloudName: 'azuremonitor', batchAPIEnabled: true },
       }) as unknown as AzureMonitorDataSourceInstanceSettings;
 
-    it('enables batchAPIEnabled when the feature flag and datasource setting are both on', () => {
-      jest.mocked(isBatchAPIFlagEnabled).mockReturnValue(true);
+    it('enables batchAPIEnabled when the datasource setting is on', () => {
       const ds = new AzureMonitorDatasource(settingsWithBatch());
       expect(ds.azureMonitorDatasource.batchAPIEnabled).toBe(true);
     });
 
-    it('stays disabled when the feature flag is off', () => {
-      jest.mocked(isBatchAPIFlagEnabled).mockReturnValue(false);
-      const ds = new AzureMonitorDatasource(settingsWithBatch());
-      expect(ds.azureMonitorDatasource.batchAPIEnabled).toBeFalsy();
-    });
-
     it('stays disabled when the datasource setting is off', () => {
-      jest.mocked(isBatchAPIFlagEnabled).mockReturnValue(true);
       const ds = new AzureMonitorDatasource(ctx.instanceSettings);
       expect(ds.azureMonitorDatasource.batchAPIEnabled).toBeFalsy();
     });

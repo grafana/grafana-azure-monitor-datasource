@@ -14,8 +14,6 @@ import (
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
-	"github.com/open-feature/go-sdk/openfeature"
-	"github.com/open-feature/go-sdk/openfeature/memprovider"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -53,29 +51,6 @@ func (t *hostRecordingTransport) RoundTrip(req *http.Request) (*http.Response, e
 	req.URL.Scheme = t.target.Scheme
 	req.URL.Host = t.target.Host
 	return http.DefaultTransport.RoundTrip(req)
-}
-
-// openfeatureTestMutex serializes tests around the process-global provider
-// swap, mirroring pkg/expr's setupOpenFeatureFlag.
-var openfeatureTestMutex sync.Mutex
-
-// stubBatchFlag registers an in-memory OpenFeature provider with the
-// datasources.azureMonitorBatchAPI flag set for the duration of the test and returns the
-// context to query with.
-func stubBatchFlag(t *testing.T, enabled bool) context.Context {
-	t.Helper()
-	openfeatureTestMutex.Lock()
-	provider := memprovider.NewInMemoryProvider(map[string]memprovider.InMemoryFlag{
-		batchAPIFlag: {Key: batchAPIFlag, DefaultVariant: "default", Variants: map[string]any{"default": enabled}},
-	})
-	require.NoError(t, openfeature.SetProviderAndWait(provider))
-	t.Cleanup(func() {
-		// Not require.NoError: a FailNow here would skip the unlock and
-		// deadlock the rest of the package.
-		_ = openfeature.SetProviderAndWait(openfeature.NoopProvider{})
-		openfeatureTestMutex.Unlock()
-	})
-	return context.Background()
 }
 
 // makeBatchDsInfo builds a minimal DatasourceInfo with batch mode enabled and
@@ -200,7 +175,7 @@ func TestExecuteBatchTimeSeriesQuery(t *testing.T) {
 			{Subscription: strPtr("sub-123"), ResourceGroup: strPtr("rg"), ResourceName: strPtr("vm1"), Region: strPtr("eastus")},
 		})
 
-		resp, err := ds.ExecuteTimeSeriesQuery(stubBatchFlag(t, true), []backend.DataQuery{q}, dsInfo, &http.Client{}, "", false)
+		resp, err := ds.ExecuteTimeSeriesQuery(context.Background(), []backend.DataQuery{q}, dsInfo, &http.Client{}, "", false)
 		require.NoError(t, err)
 		require.Len(t, resp.Responses["A"].Frames, 1)
 		assert.NoError(t, resp.Responses["A"].Error)
@@ -221,7 +196,7 @@ func TestExecuteBatchTimeSeriesQuery(t *testing.T) {
 			{Subscription: strPtr("sub-123"), ResourceGroup: strPtr("rg"), ResourceName: strPtr("vm1"), Region: strPtr("eastus")},
 		})
 
-		resp, err := ds.ExecuteTimeSeriesQuery(stubBatchFlag(t, true), []backend.DataQuery{q}, dsInfo, &http.Client{}, "", false)
+		resp, err := ds.ExecuteTimeSeriesQuery(context.Background(), []backend.DataQuery{q}, dsInfo, &http.Client{}, "", false)
 		require.NoError(t, err)
 		dr, ok := resp.Responses["A"]
 		require.True(t, ok, "refID must have a response entry even with no frames")
@@ -256,7 +231,7 @@ func TestExecuteBatchTimeSeriesQuery(t *testing.T) {
 			{Subscription: strPtr("sub-123"), ResourceGroup: strPtr("rg"), ResourceName: strPtr("vm-bad"), Region: strPtr("eastus")},
 		})
 
-		resp, err := ds.ExecuteTimeSeriesQuery(stubBatchFlag(t, true), []backend.DataQuery{qOK, qBad}, dsInfo, &http.Client{}, "", false)
+		resp, err := ds.ExecuteTimeSeriesQuery(context.Background(), []backend.DataQuery{qOK, qBad}, dsInfo, &http.Client{}, "", false)
 		require.NoError(t, err)
 
 		drOK := resp.Responses["A"]
@@ -279,7 +254,7 @@ func TestExecuteBatchTimeSeriesQuery(t *testing.T) {
 			{Subscription: strPtr("sub-123"), ResourceGroup: strPtr("rg"), ResourceName: strPtr("vm1"), Region: strPtr("eastus")},
 		})
 
-		resp, err := ds.ExecuteTimeSeriesQuery(stubBatchFlag(t, true), []backend.DataQuery{q}, dsInfo, &http.Client{}, "", false)
+		resp, err := ds.ExecuteTimeSeriesQuery(context.Background(), []backend.DataQuery{q}, dsInfo, &http.Client{}, "", false)
 		require.NoError(t, err)
 		assert.Error(t, resp.Responses["A"].Error)
 	})
@@ -336,7 +311,7 @@ func TestExecuteBatchTimeSeriesQuery(t *testing.T) {
 			},
 		}
 
-		resp, err := ds.ExecuteTimeSeriesQuery(stubBatchFlag(t, true), []backend.DataQuery{batchQ, nonBatchQ}, dsInfo, dsInfo.Services["Azure Monitor Batch Metrics"].HTTPClient, srv.URL, false)
+		resp, err := ds.ExecuteTimeSeriesQuery(context.Background(), []backend.DataQuery{batchQ, nonBatchQ}, dsInfo, dsInfo.Services["Azure Monitor Batch Metrics"].HTTPClient, srv.URL, false)
 		require.NoError(t, err)
 		assert.Contains(t, resp.Responses, "A", "batchable query should have a response")
 		assert.Contains(t, resp.Responses, "B", "non-batchable query should have a response")
@@ -367,7 +342,7 @@ func TestExecuteBatchTimeSeriesQuery(t *testing.T) {
 
 		cli := &http.Client{Transport: &redirectTransport{target: mustParseURL(srv.URL)}}
 		// Flag enabled but the datasource has BatchAPIEnabled=false; must NOT use the batch path
-		resp, err := ds.ExecuteTimeSeriesQuery(stubBatchFlag(t, true), []backend.DataQuery{q}, dsInfo, cli, srv.URL, false)
+		resp, err := ds.ExecuteTimeSeriesQuery(context.Background(), []backend.DataQuery{q}, dsInfo, cli, srv.URL, false)
 		require.NoError(t, err)
 		assert.Contains(t, resp.Responses, "A")
 	})
@@ -401,17 +376,16 @@ func TestExecuteBatchTimeSeriesQuery(t *testing.T) {
 		})
 
 		cli := &http.Client{Transport: &redirectTransport{target: mustParseURL(srv.URL)}}
-		resp, err := ds.ExecuteTimeSeriesQuery(stubBatchFlag(t, true), []backend.DataQuery{q}, dsInfo, cli, srv.URL, false)
+		resp, err := ds.ExecuteTimeSeriesQuery(context.Background(), []backend.DataQuery{q}, dsInfo, cli, srv.URL, false)
 		require.Error(t, err, "missing batch service must fail the request")
 		assert.Nil(t, resp, "no partial response should be returned when the batch service is missing")
 		assert.True(t, backend.IsDownstreamError(err), "a missing cloud configuration route is a downstream error")
 		assert.Contains(t, err.Error(), "cloud configuration")
 	})
 
-	t.Run("feature flag off: falls back to the legacy ARM metrics endpoint", func(t *testing.T) {
-		// With batchAPIEnabled set on the datasource but the feature flag off,
-		// queries must run through the per-resource ARM endpoint rather than
-		// the batch path.
+	t.Run("batchAPIEnabled off: uses the legacy ARM metrics endpoint", func(t *testing.T) {
+		// Without batchAPIEnabled on the datasource, queries must run through
+		// the per-resource ARM endpoint rather than the batch path.
 		armResponse := loadTestFile(t, "azuremonitor/1-azure-monitor-response-avg.json")
 		var mu sync.Mutex
 		var requests []string
@@ -425,15 +399,14 @@ func TestExecuteBatchTimeSeriesQuery(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		ctx := stubBatchFlag(t, false)
-
 		dsInfo := makeBatchDsInfo(srv)
+		dsInfo.Settings.BatchAPIEnabled = false
 		q := makeBatchQuery("A", "sub-123", "eastus", []dataquery.AzureMonitorResource{
 			{Subscription: strPtr("sub-123"), ResourceGroup: strPtr("rg"), ResourceName: strPtr("vm1"), Region: strPtr("eastus")},
 		})
 
 		cli := &http.Client{Transport: &redirectTransport{target: mustParseURL(srv.URL)}}
-		resp, err := ds.ExecuteTimeSeriesQuery(ctx, []backend.DataQuery{q}, dsInfo, cli, srv.URL, false)
+		resp, err := ds.ExecuteTimeSeriesQuery(context.Background(), []backend.DataQuery{q}, dsInfo, cli, srv.URL, false)
 		require.NoError(t, err)
 		require.Contains(t, resp.Responses, "A")
 		require.NoError(t, resp.Responses["A"].Error)
@@ -442,7 +415,7 @@ func TestExecuteBatchTimeSeriesQuery(t *testing.T) {
 		defer mu.Unlock()
 		require.NotEmpty(t, requests, "the legacy path must still query the ARM endpoint")
 		for _, req := range requests {
-			assert.NotContains(t, req, "metrics:getBatch", "no request may reach the batch endpoint while the flag is off")
+			assert.NotContains(t, req, "metrics:getBatch", "no request may reach the batch endpoint while batchAPIEnabled is off")
 		}
 	})
 
@@ -462,7 +435,7 @@ func TestExecuteBatchTimeSeriesQuery(t *testing.T) {
 		q := makeBatchQuery("A", "sub-123", "eastus", nil) // no resources
 
 		cli := &http.Client{Transport: &redirectTransport{target: mustParseURL(srv.URL)}}
-		resp, err := ds.ExecuteTimeSeriesQuery(stubBatchFlag(t, true), []backend.DataQuery{q}, dsInfo, cli, srv.URL, false)
+		resp, err := ds.ExecuteTimeSeriesQuery(context.Background(), []backend.DataQuery{q}, dsInfo, cli, srv.URL, false)
 		require.NoError(t, err)
 		require.Contains(t, resp.Responses, "A", "resource-less query must receive a response, not vanish")
 	})
@@ -488,7 +461,7 @@ func TestExecuteBatchTimeSeriesQuery(t *testing.T) {
 			{Subscription: strPtr("sub-123"), ResourceGroup: strPtr("rg"), ResourceName: strPtr("vm1"), Region: strPtr("chinaeast2")},
 		})
 
-		resp, err := ds.ExecuteTimeSeriesQuery(stubBatchFlag(t, true), []backend.DataQuery{q}, dsInfo, &http.Client{}, "https://management.chinacloudapi.cn", false)
+		resp, err := ds.ExecuteTimeSeriesQuery(context.Background(), []backend.DataQuery{q}, dsInfo, &http.Client{}, "https://management.chinacloudapi.cn", false)
 		require.NoError(t, err)
 		assert.NoError(t, resp.Responses["A"].Error)
 		require.Len(t, recorder.hosts, 1)
@@ -653,7 +626,7 @@ func TestExecuteBatchTimeSeriesQuerySharedResources(t *testing.T) {
 	qA := makeBatchQuery("A", "sub-123", "eastus", resources)
 	qB := makeBatchQuery("B", "sub-123", "eastus", resources)
 
-	resp, err := ds.ExecuteTimeSeriesQuery(stubBatchFlag(t, true), []backend.DataQuery{qA, qB}, dsInfo, &http.Client{}, "", false)
+	resp, err := ds.ExecuteTimeSeriesQuery(context.Background(), []backend.DataQuery{qA, qB}, dsInfo, &http.Client{}, "", false)
 	require.NoError(t, err)
 
 	drA := resp.Responses["A"]
@@ -724,7 +697,7 @@ func TestExecuteBatchTimeSeriesQueryFallback(t *testing.T) {
 		q := makeBatchQuery("A", "sub-123", "eastus", oneResource)
 		cli := &http.Client{Transport: &redirectTransport{target: mustParseURL(srv.URL)}}
 
-		resp, err := ds.ExecuteTimeSeriesQuery(stubBatchFlag(t, true), []backend.DataQuery{q}, dsInfo, cli, srv.URL, false)
+		resp, err := ds.ExecuteTimeSeriesQuery(context.Background(), []backend.DataQuery{q}, dsInfo, cli, srv.URL, false)
 		require.NoError(t, err)
 		assert.True(t, batchHit, "metrics:getBatch should have been attempted")
 		assert.True(t, fallbackHit, "ARM /batch fallback should have been called")
@@ -747,7 +720,7 @@ func TestExecuteBatchTimeSeriesQueryFallback(t *testing.T) {
 		q := makeBatchQuery("A", "sub-123", "eastus", oneResource)
 		cli := &http.Client{Transport: &redirectTransport{target: mustParseURL(srv.URL)}}
 
-		resp, err := ds.ExecuteTimeSeriesQuery(stubBatchFlag(t, true), []backend.DataQuery{q}, dsInfo, cli, srv.URL, false)
+		resp, err := ds.ExecuteTimeSeriesQuery(context.Background(), []backend.DataQuery{q}, dsInfo, cli, srv.URL, false)
 		require.NoError(t, err)
 		assert.False(t, fallbackHit, "400 is not retryable; fallback must not run")
 		assert.NotNil(t, resp.Responses["A"].Error)
@@ -777,7 +750,7 @@ func TestExecuteBatchTimeSeriesQueryFallback(t *testing.T) {
 		q := makeBatchQuery("A", "sub-123", "eastus", oneResource)
 		cli := &http.Client{Transport: &redirectTransport{target: mustParseURL(srv.URL)}}
 
-		resp, err := ds.ExecuteTimeSeriesQuery(stubBatchFlag(t, true), []backend.DataQuery{q}, dsInfo, cli, srv.URL, false)
+		resp, err := ds.ExecuteTimeSeriesQuery(context.Background(), []backend.DataQuery{q}, dsInfo, cli, srv.URL, false)
 		require.NoError(t, err)
 		assert.False(t, individualHit, "must not fan out to individual /metrics when ARM /batch fails")
 		assert.NotNil(t, resp.Responses["A"].Error, "query should fail when the ARM /batch fallback fails")
@@ -818,7 +791,7 @@ func TestExecuteBatchTimeSeriesQueryFallback(t *testing.T) {
 		q := makeBatchQuery("A", "sub-123", "eastus", resources)
 		cli := &http.Client{Transport: &redirectTransport{target: mustParseURL(srv.URL)}}
 
-		resp, err := ds.ExecuteTimeSeriesQuery(stubBatchFlag(t, true), []backend.DataQuery{q}, dsInfo, cli, srv.URL, false)
+		resp, err := ds.ExecuteTimeSeriesQuery(context.Background(), []backend.DataQuery{q}, dsInfo, cli, srv.URL, false)
 		require.NoError(t, err)
 		assert.Equal(t, 2, batchCalls, "25 resources should chunk into two ARM /batch calls (20 + 5)")
 		dr := resp.Responses["A"]
@@ -876,18 +849,10 @@ func TestExecuteBatchTimeSeriesQueryFallback(t *testing.T) {
 		q := makeBatchQuery("A", "sub-123", "eastus", resources)
 		cli := &http.Client{Transport: &redirectTransport{target: mustParseURL(srv.URL)}}
 
-		resp, err := ds.ExecuteTimeSeriesQuery(stubBatchFlag(t, true), []backend.DataQuery{q}, dsInfo, cli, srv.URL, false)
+		resp, err := ds.ExecuteTimeSeriesQuery(context.Background(), []backend.DataQuery{q}, dsInfo, cli, srv.URL, false)
 		require.NoError(t, err)
 		dr := resp.Responses["A"]
 		assert.NotNil(t, dr.Error, "the failed sub-response should surface an error")
 		assert.NotEmpty(t, dr.Frames, "the successful sub-response should still produce frames")
 	})
-}
-
-func TestIsBatchFlagEnabled(t *testing.T) {
-	openfeatureTestMutex.Lock()
-	t.Cleanup(openfeatureTestMutex.Unlock)
-
-	// No provider registered (e.g. the standalone plugin binary): defaults to off.
-	require.False(t, isBatchFlagEnabled(context.Background()))
 }

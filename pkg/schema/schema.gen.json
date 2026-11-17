@@ -29,7 +29,7 @@
               "default": false
             },
             "batchAPIEnabled": {
-              "description": "Use the Azure Monitor batch metrics endpoint for multi-resource metric queries. Only takes effect when Grafana has the `azureMonitorBatchAPI` feature toggle enabled.",
+              "description": "Use the Azure Monitor batch metrics endpoint for multi-resource metric queries.",
               "type": "boolean",
               "default": false
             },

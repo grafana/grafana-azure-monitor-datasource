@@ -45,7 +45,7 @@
       "id": "jsonData_batchAPIEnabled",
       "key": "batchAPIEnabled",
       "label": "Enable Batch API",
-      "description": "Use the Azure Monitor batch metrics endpoint for multi-resource metric queries. Only takes effect when Grafana has the `azureMonitorBatchAPI` feature toggle enabled.",
+      "description": "Use the Azure Monitor batch metrics endpoint for multi-resource metric queries.",
       "valueType": "boolean",
       "target": "jsonData",
       "defaultValue": false,

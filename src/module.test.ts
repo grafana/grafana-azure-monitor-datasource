@@ -2,13 +2,10 @@ import { DashboardLoadedEvent } from '@grafana/data';
 import { getAppEvents, reportInteraction } from '@grafana/runtime';
 
 import './module';
-import { isBatchAPIFlagEnabled } from './featureFlags';
 import { type AzureMonitorQuery } from './types/query';
 
 jest.mock('./featureFlags', () => ({
   initFeatureFlags: jest.fn(),
-  isBatchAPIFlagEnabled: jest.fn().mockReturnValue(true),
-  useBatchAPIFlag: jest.fn(),
 }));
 
 jest.mock('@grafana/runtime', () => {
@@ -141,17 +138,10 @@ const expectedInteraction = (batchAPIQueries: number) => ({
 describe('queriesOnInitDashboard', () => {
   beforeEach(() => {
     jest.mocked(reportInteraction).mockClear();
-    jest.mocked(isBatchAPIFlagEnabled).mockReturnValue(true);
   });
 
-  it('reports a `grafana_ds_azuremonitor_dashboard_loaded` interaction, counting batch API queries when the flag is on', () => {
+  it('reports a `grafana_ds_azuremonitor_dashboard_loaded` interaction, counting batch API queries', () => {
     fireDashboardLoaded(dashboardLoadedEvent());
     expect(reportInteraction).toHaveBeenCalledWith('grafana_ds_azuremonitor_dashboard_loaded', expectedInteraction(1));
-  });
-
-  it('does not count batch API queries when the feature flag is off', () => {
-    jest.mocked(isBatchAPIFlagEnabled).mockReturnValue(false);
-    fireDashboardLoaded(dashboardLoadedEvent());
-    expect(reportInteraction).toHaveBeenCalledWith('grafana_ds_azuremonitor_dashboard_loaded', expectedInteraction(0));
   });
 });
