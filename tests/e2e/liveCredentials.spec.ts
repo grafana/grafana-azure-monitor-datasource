@@ -189,7 +189,8 @@ const configureLiveDataSourceInConfigEditor = async (
 
   const saveResponse = waitForSave(page, uid);
   await page.getByRole('button', { name: 'Save & test' }).click();
-  expect((await saveResponse).status()).toBe(200);
+  const save = await saveResponse;
+  expect(save.status(), await save.text()).toBe(200);
   await expect(configPage).toHaveAlert('success');
 };
 
