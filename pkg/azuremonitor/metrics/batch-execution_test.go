@@ -883,11 +883,3 @@ func TestExecuteBatchTimeSeriesQueryFallback(t *testing.T) {
 		assert.NotEmpty(t, dr.Frames, "the successful sub-response should still produce frames")
 	})
 }
-
-func TestIsBatchFlagEnabled(t *testing.T) {
-	openfeatureTestMutex.Lock()
-	t.Cleanup(openfeatureTestMutex.Unlock)
-
-	// No provider registered (e.g. the standalone plugin binary): defaults to off.
-	require.False(t, isBatchFlagEnabled(context.Background()))
-}

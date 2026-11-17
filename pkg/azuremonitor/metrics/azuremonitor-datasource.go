@@ -20,7 +20,6 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/tracing"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
-	"github.com/open-feature/go-sdk/openfeature"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/singleflight"
@@ -98,10 +97,11 @@ func (e *AzureMonitorDatasource) ResourceRequest(rw http.ResponseWriter, req *ht
 // coreplugins depguard rule forbids importing Grafana core packages.
 const batchAPIFlag = "datasources.azureMonitorBatchAPI"
 
-// Defaults to off when the flag cannot be evaluated (e.g. the standalone
-// plugin binary has no provider).
-func isBatchFlagEnabled(ctx context.Context) bool {
-	return openfeature.NewDefaultClient().Boolean(ctx, batchAPIFlag, false, openfeature.TransactionContext(ctx))
+// Defaults to off when the flag cannot be evaluated, matching the frontend
+// default in src/featureFlags.ts so the editor never offers batch-only
+// selections that the backend would then send to the legacy endpoint.
+func isBatchFlagEnabled(ctx context.Context, logger log.Logger) bool {
+	return defaultFlagEvaluator.Boolean(ctx, logger, batchAPIFlag, false)
 }
 
 // executeTimeSeriesQuery does the following:
@@ -111,7 +111,7 @@ func isBatchFlagEnabled(ctx context.Context) bool {
 func (e *AzureMonitorDatasource) ExecuteTimeSeriesQuery(ctx context.Context, originalQueries []backend.DataQuery, dsInfo types.DatasourceInfo, client *http.Client, url string, fromAlert bool) (*backend.QueryDataResponse, error) {
 	// Short-circuiting keeps the flag evaluation off the hot path for
 	// datasources that did not opt in via batchAPIEnabled.
-	if dsInfo.Settings.BatchAPIEnabled && isBatchFlagEnabled(ctx) {
+	if dsInfo.Settings.BatchAPIEnabled && isBatchFlagEnabled(ctx, e.Logger) {
 		// The batch data-plane service only exists when the datasource has a
 		// metrics data-plane route (e.g. metrics.monitor.azure.com, or .cn for
 		// China); customized-cloud configs must supply the metricsDataPlane
@@ -127,7 +127,7 @@ func (e *AzureMonitorDatasource) ExecuteTimeSeriesQuery(ctx context.Context, ori
 		return e.executeBatchTimeSeriesQuery(ctx, originalQueries, dsInfo, client, svc.HTTPClient, svc.URL)
 	}
 	if dsInfo.Settings.BatchAPIEnabled {
-		e.Logger.Warn("Azure Monitor datasource has batchAPIEnabled=true but the datasources.azureMonitorBatchAPI feature flag is off; falling back to the legacy ARM metrics endpoint")
+		e.Logger.Warn("Azure Monitor datasource has batchAPIEnabled=true but the datasources.azureMonitorBatchAPI feature flag is off or could not be evaluated; falling back to the legacy ARM metrics endpoint")
 	}
 	e.Logger.Debug("routing metrics queries to the ARM control-plane API", "api", "arm", "endpoint", url, "numQueries", len(originalQueries))
 

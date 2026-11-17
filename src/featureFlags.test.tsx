@@ -19,7 +19,7 @@ describe('featureFlags', () => {
 
   describe('isBatchAPIFlagEnabled', () => {
     it('falls back to the default value when no provider is registered', () => {
-      expect(isBatchAPIFlagEnabled()).toBe(true);
+      expect(isBatchAPIFlagEnabled()).toBe(false);
     });
 
     it('returns the evaluated flag value once the provider is ready', async () => {
@@ -35,14 +35,14 @@ describe('featureFlags', () => {
     it('re-renders with the flag value when the provider becomes ready', async () => {
       const { result } = renderHook(() => useBatchAPIFlag(), {
         wrapper: ({ children }) => (
-          <OpenFeatureTestProvider domain={OPEN_FEATURE_DOMAIN} flagValueMap={{ [BATCH_API_FLAG]: false }} delayMs={10}>
+          <OpenFeatureTestProvider domain={OPEN_FEATURE_DOMAIN} flagValueMap={{ [BATCH_API_FLAG]: true }} delayMs={10}>
             {children}
           </OpenFeatureTestProvider>
         ),
       });
-      expect(result.current).toBe(true);
+      expect(result.current).toBe(false);
 
-      await waitFor(() => expect(result.current).toBe(false));
+      await waitFor(() => expect(result.current).toBe(true));
     });
 
     it('re-renders when the flag configuration changes on a ready provider', async () => {
@@ -63,7 +63,7 @@ describe('featureFlags', () => {
 
     it('falls back to the default value when the flag is missing from a ready provider', async () => {
       await OpenFeature.setProviderAndWait(OPEN_FEATURE_DOMAIN, new InMemoryProvider({}));
-      expect(isBatchAPIFlagEnabled()).toBe(true);
+      expect(isBatchAPIFlagEnabled()).toBe(false);
     });
   });
 });

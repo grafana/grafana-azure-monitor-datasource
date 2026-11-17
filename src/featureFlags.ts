@@ -66,15 +66,18 @@ export function initFeatureFlags(): void {
 }
 
 /**
- * Synchronous read of the Metrics Batch API flag.
+ * Synchronous read of the Metrics Batch API flag. Defaults to off, matching the
+ * backend (isBatchFlagEnabled in pkg/azuremonitor/metrics), so the editor never
+ * offers batch-only selections that the backend would then send to the legacy
+ * endpoint.
  */
 export function isBatchAPIFlagEnabled(): boolean {
-  return OpenFeature.getClient(OPEN_FEATURE_DOMAIN).getBooleanValue(BATCH_API_FLAG, true);
+  return OpenFeature.getClient(OPEN_FEATURE_DOMAIN).getBooleanValue(BATCH_API_FLAG, false);
 }
 
 /** React hook for the flag; re-renders when the provider (re)initializes. */
 export function useBatchAPIFlag(): boolean {
-  return useBooleanFlagValue(BATCH_API_FLAG, true);
+  return useBooleanFlagValue(BATCH_API_FLAG, false);
 }
 
 export function useHealthModelsFlag(): boolean {
