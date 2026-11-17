@@ -1,7 +1,8 @@
 import {
-  type CreateDataSourcePageArgs,
+  type CreateDataSourceArgs,
   type DashboardPage,
   type DataSourceConfigPage,
+  type DataSourceSettings,
   type E2ESelectorGroups,
   type PanelEditPage,
   expect,
@@ -13,6 +14,7 @@ import { AzureQueryType, ResultFormat } from '../../src/dataquery';
 import { components } from '../../src/e2e/selectors';
 
 import {
+  CLIENT_SECRET_DATA_SOURCE,
   LIVE_CREDENTIALS_SKIP_REASON,
   PLUGIN_TYPE,
   QUERY_DATA_URL,
@@ -59,8 +61,19 @@ const waitForFrames = async (page: Page): Promise<QueryDataBody> => {
 test.describe('Config editor', () => {
   test.describe('save & test', () => {
     test.describe('with live credentials', () => {
-      test('should pass the health check', async ({ createDataSourceConfigPage, page }) => {
-        const configPage = await createDataSourceConfigPage({ type: PLUGIN_TYPE });
+      let uid: string | undefined;
+
+      test.afterEach(async ({ grafanaAPIClient }) => {
+        if (uid) {
+          await grafanaAPIClient.deleteDataSourceByUID(uid);
+          uid = undefined;
+        }
+      });
+
+      test('should pass the health check', async ({ createDataSource, gotoDataSourceConfigPage, page }) => {
+        const dataSource = await createDataSource(CLIENT_SECRET_DATA_SOURCE);
+        uid = dataSource.uid;
+        const configPage = await gotoDataSourceConfigPage(dataSource.uid);
         await fillClientSecretCredentials(
           page,
           credentials?.tenantId ?? '',
@@ -151,19 +164,23 @@ const chooseOption = async (input: Locator, value: string) => {
   await input.press('Enter');
 };
 
-const createLiveDataSourceInConfigEditor = async (
-  createDataSourceConfigPage: (args: CreateDataSourcePageArgs) => Promise<DataSourceConfigPage>,
+const createLiveDataSource = async (createDataSource: (args: CreateDataSourceArgs) => Promise<DataSourceSettings>) =>
+  (await createDataSource({ ...CLIENT_SECRET_DATA_SOURCE, name: DATA_SOURCE_NAME })).uid;
+
+const configureLiveDataSourceInConfigEditor = async (
+  uid: string,
+  gotoDataSourceConfigPage: (uid: string) => Promise<DataSourceConfigPage>,
   page: Page,
   selectors: E2ESelectorGroups
 ) => {
-  const configPage = await createDataSourceConfigPage({ type: PLUGIN_TYPE, name: DATA_SOURCE_NAME });
-  await chooseOption(page.getByTestId(configEditor.azureCloud.input).locator('input'), 'Azure');
+  const configPage = await gotoDataSourceConfigPage(uid);
   await fillClientSecretCredentials(
     page,
     credentials?.tenantId ?? '',
     credentials?.clientId ?? '',
     credentials?.clientSecret ?? ''
   );
+  await chooseOption(page.getByTestId(configEditor.azureCloud.input).locator('input'), 'Azure');
   await page.getByTestId(configEditor.loadSubscriptions.button).click();
   await page.getByTestId(configEditor.defaultSubscription.input).locator('input').fill('datasources');
   await configPage.getByGrafanaSelector(selectors.components.Select.option).filter({ hasText: 'datasources' }).click();
@@ -262,15 +279,26 @@ const setVariableValue = async (
 };
 
 test.describe('Azure Monitor datasource', () => {
+  let uid: string | undefined;
+
+  test.afterEach(async ({ grafanaAPIClient }) => {
+    if (uid) {
+      await grafanaAPIClient.deleteDataSourceByUID(uid);
+      uid = undefined;
+    }
+  });
+
   test('create dashboard, add panel for metrics, log analytics, ARG, and traces queries', async ({
-    createDataSourceConfigPage,
+    createDataSource,
+    gotoDataSourceConfigPage,
     gotoDashboardPage,
     selectors,
     page,
   }) => {
     test.fail(isCloudRun, CLOUD_VERSION_CONFLICT_REASON);
     test.setTimeout(120_000);
-    await createLiveDataSourceInConfigEditor(createDataSourceConfigPage, page, selectors);
+    uid = await createLiveDataSource(createDataSource);
+    await configureLiveDataSourceInConfigEditor(uid, gotoDataSourceConfigPage, page, selectors);
     const dashboardPage = await gotoDashboardPage({
       timeRange: { from: 'now-6h', to: 'now', zone: 'Coordinated Universal Time' },
     });
@@ -319,7 +347,8 @@ test.describe('Azure Monitor datasource', () => {
   });
 
   test('create dashboard with template variables', async ({
-    createDataSourceConfigPage,
+    createDataSource,
+    gotoDataSourceConfigPage,
     gotoDashboardPage,
     page,
     selectors,
@@ -327,7 +356,8 @@ test.describe('Azure Monitor datasource', () => {
     test.fail(isCloudRun, CLOUD_VERSION_CONFLICT_REASON);
     test.fail(true, RESOURCE_PICKER_RESET_REASON);
     test.setTimeout(120_000);
-    await createLiveDataSourceInConfigEditor(createDataSourceConfigPage, page, selectors);
+    uid = await createLiveDataSource(createDataSource);
+    await configureLiveDataSourceInConfigEditor(uid, gotoDataSourceConfigPage, page, selectors);
     const dashboardPage = await gotoDashboardPage({ timeRange: { from: 'now-6h', to: 'now' } });
 
     await addAzureMonitorVariable(

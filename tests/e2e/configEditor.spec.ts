@@ -4,6 +4,7 @@ import { components } from '../../src/e2e/selectors';
 import type { AzureMonitorDataSourceJsonData, AzureMonitorDataSourceSecureJsonData } from '../../src/types/types';
 
 import {
+  CLIENT_SECRET_DATA_SOURCE,
   PLACEHOLDER_CLIENT_ID,
   PLACEHOLDER_SUBSCRIPTION,
   PLACEHOLDER_TENANT_ID,
@@ -12,6 +13,7 @@ import {
   fillClientSecretCredentials,
   isCloudRun,
   mockSubscriptions,
+  selectClientSecretAuth,
 } from './helpers';
 
 const { configEditor } = components;
@@ -30,6 +32,7 @@ test.describe('Config editor', () => {
       page,
     }) => {
       await createDataSourceConfigPage({ type: PLUGIN_TYPE });
+      await selectClientSecretAuth(page);
 
       await expect(page.getByTestId(configEditor.authType.select)).toContainText('App Registration (Client Secret)');
       await expect(page.getByRole('combobox', { name: 'Azure Cloud' })).toBeVisible();
@@ -51,7 +54,7 @@ test.describe('Config editor', () => {
       const configPage = await createDataSourceConfigPage({ type: PLUGIN_TYPE });
 
       await page.getByTestId(configEditor.authType.select).getByRole('combobox').click();
-      await expect(configPage.getByGrafanaSelector(selectors.components.Select.option)).toHaveText([
+      await expect(configPage.getByGrafanaSelector(selectors.components.Select.option)).toContainText([
         'App Registration (Client Secret)',
         'App Registration (Client Certificate)',
       ]);
@@ -133,6 +136,15 @@ test.describe('Config editor', () => {
   });
 
   test.describe('save & test', () => {
+    let uid: string | undefined;
+
+    test.afterEach(async ({ grafanaAPIClient }) => {
+      if (uid) {
+        await grafanaAPIClient.deleteDataSourceByUID(uid);
+        uid = undefined;
+      }
+    });
+
     test('should show an error alert when the health check fails', async ({ createDataSourceConfigPage, page }) => {
       const configPage = await createDataSourceConfigPage({ type: PLUGIN_TYPE });
       await fillClientSecretCredentials(
@@ -148,10 +160,13 @@ test.describe('Config editor', () => {
     });
 
     test('should show an error alert when Azure rejects the credentials', async ({
-      createDataSourceConfigPage,
+      createDataSource,
+      gotoDataSourceConfigPage,
       page,
     }) => {
-      const configPage = await createDataSourceConfigPage({ type: PLUGIN_TYPE });
+      const dataSource = await createDataSource(CLIENT_SECRET_DATA_SOURCE);
+      uid = dataSource.uid;
+      const configPage = await gotoDataSourceConfigPage(dataSource.uid);
       await fillClientSecretCredentials(
         page,
         PLACEHOLDER_TENANT_ID,

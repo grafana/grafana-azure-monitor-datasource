@@ -1,5 +1,6 @@
 import { type Page } from '@playwright/test';
 
+import { components } from '../../src/e2e/selectors';
 import type { AzureMonitorQuery } from '../../src/types/query';
 
 export const PLUGIN_TYPE = 'grafana-azure-monitor-datasource';
@@ -31,6 +32,13 @@ export const PLACEHOLDER_DATA_SOURCE = {
   secureJsonData: { clientSecret: 'placeholder-client-secret' },
 };
 
+// A Managed Identity default makes the editor request subscriptions on load, and Grafana caches the data source
+// for 5 seconds, so a call right after a save still uses Managed Identity.
+export const CLIENT_SECRET_DATA_SOURCE = {
+  type: PLUGIN_TYPE,
+  jsonData: { azureCredentials: { authType: 'clientsecret', azureCloud: 'AzureCloud' } },
+};
+
 const FROM_ISO = '2026-10-20T12:00:00.000Z';
 const TO_ISO = '2026-10-20T13:00:00.000Z';
 
@@ -49,13 +57,20 @@ export const exploreUrl = (uid: string, query: Omit<AzureMonitorQuery, 'refId'> 
 // Cloud stacks send queries to the query service instead of /api/ds/query.
 export const QUERY_DATA_URL = /\/api\/ds\/query|\/apis\/[^/]+\/v0alpha1\/namespaces\/[^/]+\/query\b/;
 
-/** Fills the app registration fields of the config editor. */
+/** Selects App Registration (Client Secret), which is not the default when Grafana enables managed or workload identity. */
+export const selectClientSecretAuth = async (page: Page) => {
+  await page.getByTestId(components.configEditor.authType.select).getByRole('combobox').click();
+  await page.getByRole('option', { name: 'App Registration (Client Secret)' }).click();
+};
+
+/** Selects App Registration (Client Secret) and fills its fields in the config editor. */
 export const fillClientSecretCredentials = async (
   page: Page,
   tenantId: string,
   clientId: string,
   clientSecret: string
 ) => {
+  await selectClientSecretAuth(page);
   await page.getByRole('textbox', { name: 'Tenant ID' }).fill(tenantId);
   await page.getByRole('textbox', { name: 'Client ID' }).fill(clientId);
   await page.getByRole('textbox', { name: 'Client Secret' }).fill(clientSecret);
