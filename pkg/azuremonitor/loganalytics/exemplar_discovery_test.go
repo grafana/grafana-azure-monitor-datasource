@@ -9,8 +9,11 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/grafana/grafana-plugin-sdk-go/backend"
 
 	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/types"
 )
@@ -89,4 +92,98 @@ func TestListReadableAppInsightsComponents_GraphError(t *testing.T) {
 
 	_, _, err := listReadableAppInsightsComponents(context.Background(), newARGTestDsInfo(svr.URL, svr.Client()))
 	require.Error(t, err)
+}
+
+const testOperationID = "d958cc15dfc4fbaafeb3f5d8a04e3d01"
+
+func newLogsTestDsInfo(url string, client *http.Client) types.DatasourceInfo {
+	return types.DatasourceInfo{
+		Services: map[string]types.DatasourceService{
+			"Azure Log Analytics": {URL: url, HTTPClient: client},
+		},
+	}
+}
+
+func testTimeRange() backend.TimeRange {
+	from := time.Date(2026, 11, 18, 19, 0, 0, 0, time.UTC)
+	return backend.TimeRange{From: from, To: from.Add(time.Hour)}
+}
+
+func TestComponentHasOperation(t *testing.T) {
+	tests := []struct {
+		name      string
+		status    int
+		body      string
+		operation string
+		expected  componentCheck
+		expectHit bool
+		expectErr bool
+	}{
+		{
+			name:      "row returned means the trace is in this component",
+			status:    http.StatusOK,
+			body:      `{"tables":[{"name":"PrimaryResult","columns":[{"name":"timestamp","type":"datetime"}],"rows":[["2026-11-18T19:45:00Z"]]}]}`,
+			operation: testOperationID,
+			expected:  componentHasTrace,
+			expectHit: true,
+		},
+		{
+			name:      "no rows means the component does not have it",
+			status:    http.StatusOK,
+			body:      `{"tables":[{"name":"PrimaryResult","columns":[],"rows":[]}]}`,
+			operation: testOperationID,
+			expected:  componentAbsent,
+			expectHit: true,
+		},
+		{
+			name:      "403 skips the component without failing the lookup",
+			status:    http.StatusForbidden,
+			body:      `{"error":{"code":"AuthorizationFailed"}}`,
+			operation: testOperationID,
+			expected:  componentSkipped,
+			expectHit: true,
+		},
+		{
+			name:      "operation id outside hex is rejected before any request",
+			status:    http.StatusOK,
+			body:      `{}`,
+			operation: "x' | drop table",
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var hits int
+			var gotPath, gotQuery string
+			svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				hits++
+				gotPath = r.URL.Path
+				raw, _ := io.ReadAll(r.Body)
+				var body map[string]string
+				_ = json.Unmarshal(raw, &body)
+				gotQuery = body["query"]
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tt.status)
+				_, _ = io.WriteString(w, tt.body)
+			}))
+			defer svr.Close()
+
+			dsInfo := newLogsTestDsInfo(svr.URL, svr.Client())
+			componentID := "/subscriptions/sub-1/resourceGroups/rg/providers/microsoft.insights/components/app-a"
+			got, err := componentHasOperation(context.Background(), dsInfo, componentID, tt.operation, testTimeRange())
+
+			if tt.expectErr {
+				require.Error(t, err)
+				require.Equal(t, 0, hits, "invalid operation id must not reach the server")
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tt.expected, got)
+			require.Equal(t, 1, hits)
+			require.True(t, strings.HasSuffix(gotPath, "/v1/apps/app-a/query"), "path was %s", gotPath)
+			require.Contains(t, gotQuery, fmt.Sprintf("operation_Id == '%s'", tt.operation))
+			require.Contains(t, gotQuery, "take 1")
+		})
+	}
 }

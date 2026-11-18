@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 
@@ -107,4 +109,70 @@ func listReadableAppInsightsComponents(ctx context.Context, dsInfo types.Datasou
 		out = out[:exemplarComponentCap]
 	}
 	return out, truncated, nil
+}
+
+// componentCheck is the outcome of checking one component for an operation ID.
+type componentCheck int
+
+const (
+	// componentAbsent means the component answered and has no telemetry for the operation.
+	componentAbsent componentCheck = iota
+	// componentHasTrace means the component has at least one row for the operation.
+	componentHasTrace
+	// componentSkipped means the component could not be checked, for example because of a 403.
+	componentSkipped
+)
+
+// operationIDPattern limits operation IDs to hex before they are placed in KQL.
+var operationIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{1,64}$`)
+
+// componentHasOperation runs a one-row KQL query against one Application Insights component.
+// The error return is non-nil only for requests that cannot be built. Any HTTP failure from the
+// component is reported as componentSkipped so one unreadable component does not fail the lookup.
+func componentHasOperation(ctx context.Context, dsInfo types.DatasourceInfo, componentID, operationID string, timeRange backend.TimeRange) (componentCheck, error) {
+	if !operationIDPattern.MatchString(operationID) {
+		return componentAbsent, fmt.Errorf("invalid operation id for trace exemplar lookup")
+	}
+	svc, ok := dsInfo.Services["Azure Log Analytics"]
+	if !ok || svc.HTTPClient == nil {
+		return componentAbsent, fmt.Errorf("azure log analytics client is not configured")
+	}
+
+	query := fmt.Sprintf(
+		"union requests, dependencies, traces, exceptions, pageViews, customEvents, availabilityResults | where operation_Id == '%s' | take 1",
+		operationID,
+	)
+	raw, err := json.Marshal(map[string]string{
+		"query":    query,
+		"timespan": timeRange.From.Format(time.RFC3339) + "/" + timeRange.To.Format(time.RFC3339),
+	})
+	if err != nil {
+		return componentAbsent, err
+	}
+
+	endpoint := strings.TrimRight(svc.URL, "/") + "/" + getApiURL(componentID, true, false)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(raw))
+	if err != nil {
+		return componentAbsent, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	res, err := svc.HTTPClient.Do(req)
+	if err != nil {
+		return componentSkipped, nil
+	}
+	defer func() { _ = res.Body.Close() }()
+	if res.StatusCode/100 != 2 {
+		return componentSkipped, nil
+	}
+
+	var parsed AzureLogAnalyticsResponse
+	if err := json.NewDecoder(res.Body).Decode(&parsed); err != nil {
+		return componentSkipped, nil
+	}
+	table, err := parsed.GetPrimaryResultTable()
+	if err != nil || len(table.Rows) == 0 {
+		return componentAbsent, nil
+	}
+	return componentHasTrace, nil
 }
