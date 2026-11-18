@@ -1211,3 +1211,42 @@ func BenchmarkEncodeQuery(b *testing.B) {
 		}
 	}
 }
+
+func TestGetCorrelationWorkspaces_FollowsNextLink(t *testing.T) {
+	var page2Hits int
+	var svr *httptest.Server
+	svr = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "page-2") {
+			page2Hits++
+			_ = json.NewEncoder(w).Encode(AzureCorrelationAPIResponse{
+				Properties: AzureCorrelationAPIResponseProperties{
+					Resources: []string{"/subscriptions/sub/resourceGroups/rg/providers/Microsoft.Insights/components/r2"},
+				},
+			})
+			return
+		}
+		// An absolute nextLink, as ARM returns it, pointing at the same service.
+		next := "https://management.azure.com" + "/page-2?$skiptoken=abc"
+		_ = json.NewEncoder(w).Encode(AzureCorrelationAPIResponse{
+			Properties: AzureCorrelationAPIResponseProperties{
+				Resources: []string{"/subscriptions/sub/resourceGroups/rg/providers/Microsoft.Insights/components/r1"},
+				NextLink:  &next,
+			},
+		})
+	}))
+	defer svr.Close()
+
+	dsInfo := types.DatasourceInfo{
+		Services: map[string]types.DatasourceService{
+			"Azure Monitor": {URL: svr.URL, HTTPClient: svr.Client()},
+		},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	got, err := getCorrelationWorkspaces(ctx, "/subscriptions/sub", map[string]bool{}, dsInfo, "op")
+	require.NoError(t, err)
+	require.Equal(t, 1, page2Hits)
+	_, ok := got["/subscriptions/sub/resourcegroups/rg/providers/microsoft.insights/components/r2"]
+	require.True(t, ok, "second page resource missing: %#v", got)
+}

@@ -815,15 +815,18 @@ func getCorrelationWorkspaces(ctx context.Context, baseResource string, resource
 	azMonService := dsInfo.Services["Azure Monitor"]
 	correlationUrl := azMonService.URL + fmt.Sprintf("%s/providers/microsoft.insights/transactions/%s", baseResource, operationId)
 
-	callCorrelationAPI := func(url string) (AzureCorrelationAPIResponse, error) {
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer([]byte{}))
+	callCorrelationAPI := func(target string, extraQuery url.Values) (AzureCorrelationAPIResponse, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewBuffer([]byte{}))
 		if err != nil {
 			return AzureCorrelationAPIResponse{}, fmt.Errorf("%v: %w", "failed to create request", err)
 		}
-		req.URL.Path = url
+		req.URL.Path = target
 		req.Header.Set("Content-Type", "application/json")
 		values := req.URL.Query()
-		values.Add("api-version", "2019-10-17-preview")
+		for key, vals := range extraQuery {
+			values[key] = vals
+		}
+		values.Set("api-version", "2019-10-17-preview")
 		req.URL.RawQuery = values.Encode()
 		req.Method = "GET"
 
@@ -872,17 +875,23 @@ func getCorrelationWorkspaces(ctx context.Context, baseResource string, resource
 		return data, nil
 	}
 
-	var nextLink *string
-	var correlationResponse AzureCorrelationAPIResponse
-
-	correlationResponse, err := callCorrelationAPI(correlationUrl)
+	correlationResponse, err := callCorrelationAPI(correlationUrl, nil)
 	if err != nil {
 		return nil, err
 	}
-	nextLink = correlationResponse.Properties.NextLink
+	nextLink := correlationResponse.Properties.NextLink
 
-	for nextLink != nil {
-		correlationResponse, err := callCorrelationAPI(correlationUrl)
+	seen := map[string]bool{}
+	for pages := 0; nextLink != nil && *nextLink != ""; pages++ {
+		if seen[*nextLink] || pages >= maxCorrelationPages {
+			break
+		}
+		seen[*nextLink] = true
+		target, query, err := rebaseNextLink(azMonService.URL, *nextLink)
+		if err != nil {
+			return nil, err
+		}
+		correlationResponse, err = callCorrelationAPI(target, query)
 		if err != nil {
 			return nil, err
 		}
@@ -892,6 +901,19 @@ func getCorrelationWorkspaces(ctx context.Context, baseResource string, resource
 	// Remove the base element as that's where the query is run anyway
 	delete(resourcesMap, strings.ToLower(baseResource))
 	return resourcesMap, nil
+}
+
+// maxCorrelationPages bounds how many nextLink pages a correlation lookup follows.
+const maxCorrelationPages = 10
+
+// rebaseNextLink keeps the path and query of an ARM nextLink and places them on the
+// Azure Monitor service URL, so the request goes through the same data source client.
+func rebaseNextLink(serviceURL, nextLink string) (string, url.Values, error) {
+	parsed, err := url.Parse(nextLink)
+	if err != nil {
+		return "", nil, fmt.Errorf("invalid correlation nextLink: %w", err)
+	}
+	return serviceURL + parsed.Path, parsed.Query(), nil
 }
 
 // GetPrimaryResultTable returns the first table in the response named "PrimaryResult", or an
