@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -1299,4 +1300,77 @@ func TestBuildAppInsightsQuery_EmptyResources(t *testing.T) {
 			require.Contains(t, err.Error(), tt.expectedErrorString)
 		})
 	}
+}
+
+func TestBuildAppInsightsQuery_ExemplarDiscovery(t *testing.T) {
+	const componentName = "app-a"
+	componentResourceID := "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.Insights/components/" + componentName
+	operationID := "d958cc15dfc4fbaafeb3f5d8a04e3d01"
+
+	var subscriptionsHit bool
+	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		path := r.URL.Path
+		switch {
+		case path == "/subscriptions":
+			subscriptionsHit = true
+			w.WriteHeader(http.StatusForbidden)
+		case strings.HasSuffix(path, "/providers/Microsoft.ResourceGraph/resources"):
+			_, _ = io.WriteString(w, fmt.Sprintf(`{"data":[{"id":%q,"subscriptionId":"sub"}]}`, componentResourceID))
+		case strings.HasSuffix(path, "/v1/apps/"+componentName+"/query"):
+			_, _ = io.WriteString(w, `{"tables":[{"name":"PrimaryResult","columns":[],"rows":[["2026-11-18T19:45:00Z"]]}]}`)
+		case strings.Contains(strings.ToLower(path), "/providers/microsoft.insights/transactions/"):
+			correlationRes := AzureCorrelationAPIResponse{
+				ID:         componentResourceID,
+				Name:       operationID,
+				Type:       "microsoft.insights/transactions",
+				Properties: AzureCorrelationAPIResponseProperties{Resources: []string{componentResourceID}},
+			}
+			_ = json.NewEncoder(w).Encode(correlationRes)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer svr.Close()
+
+	provider := httpclient.NewProvider(httpclient.ProviderOptions{Timeout: &httpclient.DefaultTimeoutOptions})
+	client, err := provider.New()
+	require.NoError(t, err)
+
+	dsInfo := types.DatasourceInfo{
+		Services: map[string]types.DatasourceService{
+			"Azure Monitor":        {URL: svr.URL, HTTPClient: client},
+			"Azure Resource Graph": {URL: svr.URL, HTTPClient: client},
+			"Azure Log Analytics":  {URL: svr.URL, HTTPClient: client},
+		},
+		JSONData: map[string]any{"azureLogAnalyticsSameAs": false},
+		Settings: types.AzureMonitorSettings{SubscriptionId: ""},
+	}
+	appInsightsRegExp := regexp.MustCompile("providers/Microsoft.Insights/components")
+	fromStart := time.Date(2026, 11, 18, 19, 0, 0, 0, time.UTC)
+	timeRange := backend.TimeRange{From: fromStart, To: fromStart.Add(time.Hour)}
+
+	query := backend.DataQuery{
+		JSON: fmt.Appendf(nil, `{
+			"queryType": "traceql",
+			"azureTraces": {
+				"resources": [],
+				"resultFormat": "%s",
+				"traceTypes": ["trace"],
+				"operationId": %q
+			}
+		}`, dataquery.ResultFormatTable, operationID),
+		RefID:     "A",
+		TimeRange: timeRange,
+		QueryType: string(dataquery.AzureQueryTypeTraceExemplar),
+	}
+
+	built, err := buildAppInsightsQuery(context.Background(), query, dsInfo, appInsightsRegExp, log.NewNullLogger())
+	require.NoError(t, err)
+	require.NotNil(t, built)
+	// Resource IDs are lowercased in the correlation set, so compare case-insensitively.
+	require.Len(t, built.Resources, 1)
+	require.True(t, strings.EqualFold(componentResourceID, built.Resources[0]), "got %s", built.Resources[0])
+	require.Contains(t, built.URL, "v1/apps/"+componentName+"/query")
+	require.False(t, subscriptionsHit, "exemplar discovery must not list subscriptions")
 }

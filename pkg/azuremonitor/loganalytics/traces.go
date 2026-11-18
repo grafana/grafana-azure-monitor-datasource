@@ -205,13 +205,27 @@ func buildAppInsightsQuery(ctx context.Context, query backend.DataQuery, dsInfo 
 	resultFormat := ParseResultFormat(azureTracesTarget.ResultFormat, dataquery.AzureQueryTypeAzureTraces)
 
 	resources := azureTracesTarget.Resources
+	// discoveredComponent is set when an exemplar lookup found the Application Insights component
+	// that holds the trace. It is the query target and stays in the resource set after correlation.
+	discoveredComponent := ""
 	if query.QueryType == string(dataquery.AzureQueryTypeTraceExemplar) {
-		subscription, err := utils.GetFirstSubscriptionOrDefault(ctx, dsInfo, logger)
-		if err != nil {
-			errorMessage := fmt.Errorf("failed to retrieve subscription for trace exemplars query: %w", err)
-			return nil, utils.ApplySourceFromError(errorMessage, err)
+		if dsInfo.Settings.SubscriptionId != "" {
+			resources = []string{fmt.Sprintf("/subscriptions/%s", dsInfo.Settings.SubscriptionId)}
+		} else {
+			operationID := ""
+			if azureTracesTarget.OperationId != nil {
+				operationID = *azureTracesTarget.OperationId
+			}
+			componentID, discoverErr := discoverExemplarComponent(ctx, dsInfo, operationID, query.TimeRange, logger)
+			if discoverErr != nil {
+				return nil, utils.ApplySourceFromError(
+					fmt.Errorf("failed to locate an Application Insights component for trace exemplar: %w", discoverErr),
+					discoverErr,
+				)
+			}
+			discoveredComponent = componentID
+			resources = []string{componentID}
 		}
-		resources = []string{fmt.Sprintf("/subscriptions/%s", subscription)}
 	}
 
 	if len(resources) == 0 {
@@ -238,6 +252,10 @@ func buildAppInsightsQuery(ctx context.Context, query backend.DataQuery, dsInfo 
 			return nil, utils.ApplySourceFromError(errorMessage, err)
 		}
 	}
+	if discoveredComponent != "" {
+		// Correlation removes its base resource, which here is the component that holds the trace.
+		resourcesMap[strings.ToLower(discoveredComponent)] = true
+	}
 
 	queryResources := make([]string, 0)
 	for resource := range resourcesMap {
@@ -251,6 +269,9 @@ func buildAppInsightsQuery(ctx context.Context, query backend.DataQuery, dsInfo 
 			return nil, fmt.Errorf("no correlation resources found for trace exemplar query with operation ID: %s", operationId)
 		}
 		resourceOrWorkspace = resources[0]
+		if discoveredComponent != "" {
+			resourceOrWorkspace = discoveredComponent
+		}
 	}
 
 	queryString, traceQueries, err := buildTraceQueries(query, dsInfo, queryJSONModel.AzureTraces, operationId, resultFormat, queryResources)
