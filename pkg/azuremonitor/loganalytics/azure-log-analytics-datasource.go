@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -442,6 +443,9 @@ func (e *AzureLogAnalyticsDatasource) buildQuery(ctx context.Context, query back
 	return azureLogAnalyticsQuery, nil
 }
 
+// wideFrameCellLimit keeps a wide frame plus its Arrow encode under about 1.3 GiB of heap.
+var wideFrameCellLimit int64 = 25_000_000
+
 func (e *AzureLogAnalyticsDatasource) executeQuery(ctx context.Context, query *AzureLogAnalyticsQuery, dsInfo types.DatasourceInfo, client *http.Client, url string) (*backend.DataResponse, error) {
 	// If azureLogAnalyticsSameAs is defined and set to false, return an error
 	if sameAs, ok := dsInfo.JSONData["azureLogAnalyticsSameAs"]; ok {
@@ -558,10 +562,14 @@ func (e *AzureLogAnalyticsDatasource) executeQuery(ctx context.Context, query *A
 	case dataquery.ResultFormatTimeSeries:
 		tsSchema := frame.TimeSeriesSchema()
 		if tsSchema.Type == data.TimeSeriesTypeLong {
-			wideFrame, err := data.LongToWide(frame, nil)
+			wideFrame, err := data.LongToWideWithLimit(frame, nil, wideFrameCellLimit)
 			if err == nil {
 				frame = wideFrame
 			} else {
+				if errors.Is(err, data.ErrorWideFrameTooLarge) {
+					e.Logger.Warn("time series result exceeds the wide frame cell limit, returning the long table",
+						"rows", frame.Rows(), "fields", len(frame.Fields), "err", err)
+				}
 				frame.AppendNotices(data.Notice{
 					Severity: data.NoticeSeverityWarning,
 					Text:     "could not convert frame to time series, returning raw table: " + err.Error(),

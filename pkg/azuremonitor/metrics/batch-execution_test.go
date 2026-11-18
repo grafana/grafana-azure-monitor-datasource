@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -14,11 +15,11 @@ import (
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
-	"github.com/open-feature/go-sdk/openfeature"
-	"github.com/open-feature/go-sdk/openfeature/memprovider"
+	"github.com/grafana/grafana-plugin-sdk-go/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/featureflags"
 	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/kinds/dataquery"
 	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/types"
 )
@@ -55,27 +56,21 @@ func (t *hostRecordingTransport) RoundTrip(req *http.Request) (*http.Response, e
 	return http.DefaultTransport.RoundTrip(req)
 }
 
-// openfeatureTestMutex serializes tests around the process-global provider
-// swap, mirroring pkg/expr's setupOpenFeatureFlag.
-var openfeatureTestMutex sync.Mutex
-
-// stubBatchFlag registers an in-memory OpenFeature provider with the
-// datasources.azureMonitorBatchAPI flag set for the duration of the test and returns the
-// context to query with.
+// stubBatchFlag returns a request context whose host advertises an OFREP
+// endpoint serving the batch API flag with the given value.
 func stubBatchFlag(t *testing.T, enabled bool) context.Context {
 	t.Helper()
-	openfeatureTestMutex.Lock()
-	provider := memprovider.NewInMemoryProvider(map[string]memprovider.InMemoryFlag{
-		batchAPIFlag: {Key: batchAPIFlag, DefaultVariant: "default", Variants: map[string]any{"default": enabled}},
-	})
-	require.NoError(t, openfeature.SetProviderAndWait(provider))
-	t.Cleanup(func() {
-		// Not require.NoError: a FailNow here would skip the unlock and
-		// deadlock the rest of the package.
-		_ = openfeature.SetProviderAndWait(openfeature.NoopProvider{})
-		openfeatureTestMutex.Unlock()
-	})
-	return context.Background()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"key": featureflags.BatchAPI, "value": enabled, "reason": "STATIC", "variant": "default"})
+	}))
+	t.Cleanup(srv.Close)
+	ctx := config.WithGrafanaConfig(context.Background(), config.NewGrafanaCfg(map[string]string{
+		config.OpenFeatureProviderURL:  srv.URL,
+		config.OpenFeatureProviderType: "ofrep",
+	}))
+	// A namespace per test keeps the process-wide flag cache from serving another test's result.
+	return backend.WithPluginContext(ctx, backend.PluginContext{Namespace: t.Name()})
 }
 
 // makeBatchDsInfo builds a minimal DatasourceInfo with batch mode enabled and
@@ -444,6 +439,34 @@ func TestExecuteBatchTimeSeriesQuery(t *testing.T) {
 		for _, req := range requests {
 			assert.NotContains(t, req, "metrics:getBatch", "no request may reach the batch endpoint while the flag is off")
 		}
+	})
+
+	t.Run("no usable flag endpoint: uses the batch API", func(t *testing.T) {
+		var mu sync.Mutex
+		var requests []string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			mu.Lock()
+			requests = append(requests, r.URL.Path)
+			mu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(batchSuccessResponse([]string{resourceID}, 42.0))
+		}))
+		defer srv.Close()
+
+		dsInfo := makeBatchDsInfo(srv)
+		q := makeBatchQuery("A", "sub-123", "eastus", []dataquery.AzureMonitorResource{
+			{Subscription: strPtr("sub-123"), ResourceGroup: strPtr("rg"), ResourceName: strPtr("vm1"), Region: strPtr("eastus")},
+		})
+
+		resp, err := ds.ExecuteTimeSeriesQuery(context.Background(), []backend.DataQuery{q}, dsInfo, &http.Client{}, "", false)
+		require.NoError(t, err)
+		require.NoError(t, resp.Responses["A"].Error)
+
+		mu.Lock()
+		defer mu.Unlock()
+		assert.True(t, slices.ContainsFunc(requests, func(path string) bool {
+			return strings.Contains(path, "metrics:getBatch")
+		}), "without a flag endpoint the flag takes its default, on; requests: %v", requests)
 	})
 
 	t.Run("query without resources is not silently dropped by the batch path", func(t *testing.T) {
@@ -882,12 +905,4 @@ func TestExecuteBatchTimeSeriesQueryFallback(t *testing.T) {
 		assert.NotNil(t, dr.Error, "the failed sub-response should surface an error")
 		assert.NotEmpty(t, dr.Frames, "the successful sub-response should still produce frames")
 	})
-}
-
-func TestIsBatchFlagEnabled(t *testing.T) {
-	openfeatureTestMutex.Lock()
-	t.Cleanup(openfeatureTestMutex.Unlock)
-
-	// No provider registered (e.g. the standalone plugin binary): defaults to off.
-	require.False(t, isBatchFlagEnabled(context.Background()))
 }

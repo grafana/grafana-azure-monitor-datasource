@@ -21,6 +21,7 @@ import (
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/httpclient"
+	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"github.com/grafana/grafana-plugin-sdk-go/config"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
 	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/kinds/dataquery"
@@ -889,6 +890,88 @@ func Test_executeQueryErrorWithDifferentLogAnalyticsCreds(t *testing.T) {
 			t.Error("expecting the error to inform of bad credentials")
 		}
 	})
+}
+
+type warnRecorder struct {
+	log.Logger
+	warns [][]any
+}
+
+func (r *warnRecorder) Warn(_ string, args ...any) {
+	r.warns = append(r.warns, args)
+}
+
+func Test_executeQueryTimeSeriesWideFrameLimit(t *testing.T) {
+	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, err := w.Write([]byte(`{"tables":[{"name":"PrimaryResult",
+			"columns":[{"name":"TimeGenerated","type":"datetime"},{"name":"Computer","type":"string"},{"name":"Count","type":"long"}],
+			"rows":[["2026-01-01T00:00:00Z","a",1],["2026-01-01T00:01:00Z","b",2],["2026-01-01T00:02:00Z","c",3]]}]}`))
+		require.NoError(t, err)
+	}))
+	t.Cleanup(svr.Close)
+
+	query := &AzureLogAnalyticsQuery{
+		RefID:        "A",
+		ResultFormat: dataquery.ResultFormatTimeSeries,
+		QueryType:    dataquery.AzureQueryTypeLogAnalytics,
+		JSON:         []byte(`{}`),
+		Query:        "Heartbeat",
+	}
+
+	tests := []struct {
+		name       string
+		cellLimit  int64
+		wantType   data.FrameType
+		wantFields int
+		wantNotice bool
+	}{
+		{
+			name:       "wide frame under the limit",
+			cellLimit:  wideFrameCellLimit,
+			wantType:   data.FrameTypeTimeSeriesWide,
+			wantFields: 4,
+		},
+		{
+			name:       "long table and notice over the limit",
+			cellLimit:  11,
+			wantType:   data.FrameTypeUnknown,
+			wantFields: 3,
+			wantNotice: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			defaultLimit := wideFrameCellLimit
+			wideFrameCellLimit = tt.cellLimit
+			t.Cleanup(func() { wideFrameCellLimit = defaultLimit })
+
+			logger := &warnRecorder{Logger: log.NewNullLogger()}
+			ds := AzureLogAnalyticsDatasource{Logger: logger}
+
+			res, err := ds.executeQuery(context.Background(), query, types.DatasourceInfo{}, svr.Client(), svr.URL)
+			require.NoError(t, err)
+			require.NoError(t, res.Error)
+			require.Len(t, res.Frames, 1)
+
+			frame := res.Frames[0]
+			require.Equal(t, tt.wantType, frame.Meta.Type)
+			require.Len(t, frame.Fields, tt.wantFields)
+			require.Equal(t, 3, frame.Rows())
+			if !tt.wantNotice {
+				require.Empty(t, frame.Meta.Notices)
+				require.Empty(t, logger.warns)
+				return
+			}
+			require.Len(t, logger.warns, 1)
+			require.Equal(t, []any{"rows", 3, "fields", 3, "err"}, logger.warns[0][:5])
+			require.ErrorIs(t, logger.warns[0][5].(error), data.ErrorWideFrameTooLarge)
+			require.Len(t, frame.Meta.Notices, 1)
+			require.Equal(t, data.NoticeSeverityWarning, frame.Meta.Notices[0].Severity)
+			require.Contains(t, frame.Meta.Notices[0].Text, data.ErrorWideFrameTooLarge.Error())
+		})
+	}
 }
 
 func Test_exemplarsFeatureToggle(t *testing.T) {

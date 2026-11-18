@@ -20,11 +20,11 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/tracing"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
-	"github.com/open-feature/go-sdk/openfeature"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/singleflight"
 
+	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/featureflags"
 	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/kinds/dataquery"
 	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/loganalytics"
 	azTime "github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/time"
@@ -94,16 +94,6 @@ func (e *AzureMonitorDatasource) ResourceRequest(rw http.ResponseWriter, req *ht
 	return e.Proxy.Do(rw, req, cli)
 }
 
-// Registered in pkg/services/featuremgmt; referenced by name because the
-// coreplugins depguard rule forbids importing Grafana core packages.
-const batchAPIFlag = "datasources.azureMonitorBatchAPI"
-
-// Defaults to off when the flag cannot be evaluated (e.g. the standalone
-// plugin binary has no provider).
-func isBatchFlagEnabled(ctx context.Context) bool {
-	return openfeature.NewDefaultClient().Boolean(ctx, batchAPIFlag, false, openfeature.TransactionContext(ctx))
-}
-
 // executeTimeSeriesQuery does the following:
 // 1. build the AzureMonitor url and querystring for each query
 // 2. executes each query by calling the Azure Monitor API
@@ -111,7 +101,8 @@ func isBatchFlagEnabled(ctx context.Context) bool {
 func (e *AzureMonitorDatasource) ExecuteTimeSeriesQuery(ctx context.Context, originalQueries []backend.DataQuery, dsInfo types.DatasourceInfo, client *http.Client, url string, fromAlert bool) (*backend.QueryDataResponse, error) {
 	// Short-circuiting keeps the flag evaluation off the hot path for
 	// datasources that did not opt in via batchAPIEnabled.
-	if dsInfo.Settings.BatchAPIEnabled && isBatchFlagEnabled(ctx) {
+	// The default matches the flag's definition, so the flag stays on where the host advertises no flag endpoint.
+	if dsInfo.Settings.BatchAPIEnabled && featureflags.IsEnabled(ctx, featureflags.BatchAPI, true) {
 		// The batch data-plane service only exists when the datasource has a
 		// metrics data-plane route (e.g. metrics.monitor.azure.com, or .cn for
 		// China); customized-cloud configs must supply the metricsDataPlane

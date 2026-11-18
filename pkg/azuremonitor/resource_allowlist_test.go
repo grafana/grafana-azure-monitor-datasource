@@ -16,7 +16,7 @@ import (
 // The legitimate call shapes are derived directly from every getResource/
 // postResource call site in public/app/plugins/datasource/azuremonitor
 // (azure_monitor_datasource.ts, url_builder.ts, azure_log_analytics_datasource.ts,
-// azure_resource_graph_datasource.ts).
+// azure_resource_graph_datasource.ts, azure_health_models_datasource.ts).
 func Test_isAllowedResourcePath_legitimateCalls(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -26,6 +26,8 @@ func Test_isAllowedResourcePath_legitimateCalls(t *testing.T) {
 	}{
 		{"list subscriptions", azureMonitor, http.MethodGet, "/subscriptions"},
 		{"list locations", azureMonitor, http.MethodGet, "/subscriptions/sub-1/locations"},
+		{"list health models", azureMonitor, http.MethodGet, "/subscriptions/sub-1/providers/Microsoft.CloudHealth/healthmodels"},
+		{"list health models, mixed case", azureMonitor, http.MethodGet, "/subscriptions/sub-1/providers/microsoft.cloudhealth/healthModels"},
 		{"list log analytics workspaces", azureMonitor, http.MethodGet, "/subscriptions/sub-1/providers/Microsoft.OperationalInsights/workspaces"},
 		{"metric namespaces, single resource", azureMonitor, http.MethodGet, "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Compute/virtualMachines/vm-1/providers/microsoft.insights/metricNamespaces"},
 		{"metric namespaces, subscription scope (globalRegion)", azureMonitor, http.MethodGet, "/subscriptions/sub-1/providers/microsoft.insights/metricNamespaces"},
@@ -96,6 +98,9 @@ func Test_isAllowedResourcePath_rejectsUnsupportedPaths(t *testing.T) {
 		{"GET where only POST is legitimate (resourcegraph)", azureResourceGraph, http.MethodGet, "/providers/Microsoft.ResourceGraph/resources"},
 		{"POST where only GET is legitimate (metric namespaces)", azureMonitor, http.MethodPost, "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Compute/virtualMachines/vm-1/providers/microsoft.insights/metricNamespaces"},
 		{"POST where only GET is legitimate (dimension values)", azureMonitor, http.MethodPost, "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Compute/virtualMachines/vm-1/providers/microsoft.insights/metrics"},
+		{"POST where only GET is legitimate (health models)", azureMonitor, http.MethodPost, "/subscriptions/sub-1/providers/Microsoft.CloudHealth/healthmodels"},
+		{"PUT on the health models collection", azureMonitor, http.MethodPut, "/subscriptions/sub-1/providers/Microsoft.CloudHealth/healthmodels"},
+		{"DELETE on the health models collection", azureMonitor, http.MethodDelete, "/subscriptions/sub-1/providers/Microsoft.CloudHealth/healthmodels"},
 		{"PUT on an otherwise-allowed subscriptions path", azureMonitor, http.MethodPut, "/subscriptions"},
 		{"DELETE on an otherwise-allowed subscriptions path", azureMonitor, http.MethodDelete, "/subscriptions"},
 	}
@@ -114,6 +119,12 @@ func Test_isAllowedResourcePath_rejectsUnsupportedPaths(t *testing.T) {
 		{"trailing slash on an otherwise-exact match", azureMonitor, http.MethodGet, "/subscriptions/"},
 		{"extra segment appended after an otherwise-exact match", azureResourceGraph, http.MethodPost, "/providers/Microsoft.ResourceGraph/resources/extra"},
 		{"resource graph path smuggled onto the azuremonitor route", azureMonitor, http.MethodPost, "/providers/Microsoft.ResourceGraph/resources"},
+		{"health models trailing slash", azureMonitor, http.MethodGet, "/subscriptions/sub-1/providers/Microsoft.CloudHealth/healthmodels/"},
+		{"health model item rather than collection", azureMonitor, http.MethodGet, "/subscriptions/sub-1/providers/Microsoft.CloudHealth/healthmodels/model-1"},
+		{"health model action", azureMonitor, http.MethodGet, "/subscriptions/sub-1/providers/Microsoft.CloudHealth/healthmodels/model-1/listKeys"},
+		{"health models from a different provider", azureMonitor, http.MethodGet, "/subscriptions/sub-1/providers/Microsoft.CloudHealth.Other/healthmodels"},
+		{"health models at resource group scope", azureMonitor, http.MethodGet, "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.CloudHealth/healthmodels"},
+		{"health models path on the resourcegraph route", azureResourceGraph, http.MethodGet, "/subscriptions/sub-1/providers/Microsoft.CloudHealth/healthmodels"},
 		{"empty path", azureMonitor, http.MethodGet, ""},
 		{"bare root", azureMonitor, http.MethodGet, "/"},
 		{"unknown subDataSource key entirely", "some-other-route", http.MethodGet, "/subscriptions"},
