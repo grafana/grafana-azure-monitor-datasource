@@ -8,6 +8,7 @@
 - Fix Save & test failing with a 409 after loading subscriptions in the config editor in [#137](https://github.com/grafana/grafana-azure-monitor-datasource/pull/137)
 - Refresh the list of metrics resource types in [#165](https://github.com/grafana/grafana-azure-monitor-datasource/pull/165)
 - Update backend dependencies in [#169](https://github.com/grafana/grafana-azure-monitor-datasource/pull/169)
+- Fix backend requests (e.g. alert evaluation) not using fallback credentials when they are enabled and username assertion is on, by updating grafana-azure-sdk-go to v2.6.1 in [#185](https://github.com/grafana/grafana-azure-monitor-datasource/pull/185)
 
 ## 13.0.8
 
