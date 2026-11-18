@@ -8,7 +8,6 @@
 - Fix Save & test failing with a 409 after loading subscriptions in the config editor in [#137](https://github.com/grafana/grafana-azure-monitor-datasource/pull/137)
 - Refresh the list of metrics resource types in [#165](https://github.com/grafana/grafana-azure-monitor-datasource/pull/165)
 - Update backend dependencies in [#169](https://github.com/grafana/grafana-azure-monitor-datasource/pull/169)
-- Download translations from Crowdin in [#164](https://github.com/grafana/grafana-azure-monitor-datasource/pull/164)
 
 ## 13.0.8
 
