@@ -1,6 +1,6 @@
 import { cx } from '@emotion/css';
-import { isEqual, uniqBy } from 'lodash';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { uniqBy } from 'lodash';
+import { useCallback, useEffect, useState } from 'react';
 import { useEffectOnce } from 'react-use';
 
 import { LocalStorageValueProvider } from '@grafana/data';
@@ -90,15 +90,6 @@ const ResourcePicker = ({
     locations: [],
   });
   const [view, setView] = useState<'picker' | 'recent'>('picker');
-
-  // The query editors pass a new resources array on every render, so resync only when its value changes.
-  const syncedResources = useRef(resources);
-  useEffect(() => {
-    if (!isEqual(syncedResources.current, resources)) {
-      syncedResources.current = resources;
-      setInternalSelected(resources);
-    }
-  }, [resources]);
 
   const loadFilterOptions = useCallback(async () => {
     setIsLoadingSubscriptions(true);

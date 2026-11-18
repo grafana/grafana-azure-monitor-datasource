@@ -428,15 +428,6 @@ describe('AzureMonitor ResourcePicker', () => {
 
       expect(await screen.findByLabelText('search-result')).toBeInTheDocument();
     });
-
-    it('shows the new resources when the resources prop changes value', async () => {
-      const { rerender } = render(<ResourcePicker {...metricsProps} resources={[]} />);
-      await userEvent.click(await screen.findByText('Advanced'));
-
-      rerender(<ResourcePicker {...metricsProps} resources={[{ subscription: 'def-456' }]} />);
-
-      expect(await screen.findByLabelText('Subscription')).toHaveValue('def-456');
-    });
   });
 
   describe('when rendering resource picker without any selectable entry types', () => {
