@@ -1,14 +1,20 @@
+## 13.0.9
+
+- Add support for workload identity credentials (tenant and client ID), and backend assertion support when workload identity is enabled in [#144](https://github.com/grafana/grafana-azure-monitor-datasource/pull/144)
+- Add a Health Models query editor in [#166](https://github.com/grafana/grafana-azure-monitor-datasource/pull/166)
+- Fix out-of-memory crashes when a Log Analytics time series result is too large for a wide frame, and return the table with a warning instead in [#172](https://github.com/grafana/grafana-azure-monitor-datasource/pull/172)
+- Fix the Enable Batch API setting having no effect on metrics queries in [#181](https://github.com/grafana/grafana-azure-monitor-datasource/pull/181)
+- Fix multi-resource metrics queries and the query editor failing with "not enabled for Cross Resource metrics" when the Batch API is off in [#182](https://github.com/grafana/grafana-azure-monitor-datasource/pull/182)
+- Fix Save & test failing with a 409 after loading subscriptions in the config editor in [#137](https://github.com/grafana/grafana-azure-monitor-datasource/pull/137)
+- Refresh the list of metrics resource types in [#165](https://github.com/grafana/grafana-azure-monitor-datasource/pull/165)
+- Update backend dependencies in [#169](https://github.com/grafana/grafana-azure-monitor-datasource/pull/169)
+- Download translations from Crowdin in [#164](https://github.com/grafana/grafana-azure-monitor-datasource/pull/164)
+
 ## 13.0.8
 
 - Keep traces correlation requests on the configured host in [#161](https://github.com/grafana/grafana-azure-monitor-datasource/pull/161)
 - Fix dimension filter values failing with 403 in [#148](https://github.com/grafana/grafana-azure-monitor-datasource/pull/148)
 - Update dependencies
-
-## Unreleased
-- Add support for workload identity credentials (tenant and client ID), and backend assertion support when workload in memory is enabled
-- Fix out-of-memory crashes when a Log Analytics time series result is too large for a wide frame, and return the table with a warning instead
-- Fix the Enable Batch API setting having no effect on metrics queries
-- Fix multi-resource metrics queries and the query editor failing with "not enabled for Cross Resource metrics" when the Batch API is off
 
 ## 13.0.7
 
