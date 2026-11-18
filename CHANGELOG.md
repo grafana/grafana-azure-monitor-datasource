@@ -1,4 +1,4 @@
-## 13.0.9
+## 13.1.0
 
 - Add support for workload identity credentials (tenant and client ID), and backend assertion support when workload identity is enabled in [#144](https://github.com/grafana/grafana-azure-monitor-datasource/pull/144)
 - Add a Health Models query editor in [#166](https://github.com/grafana/grafana-azure-monitor-datasource/pull/166)
