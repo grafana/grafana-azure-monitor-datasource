@@ -8,12 +8,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
+	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 
 	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/types"
 )
@@ -186,4 +188,125 @@ func TestComponentHasOperation(t *testing.T) {
 			require.Contains(t, gotQuery, "take 1")
 		})
 	}
+}
+
+// discoveryServer serves a Resource Graph component list and a per-component KQL responder.
+// rowsFor maps a component name to the HTTP status and whether the KQL answer has a row.
+type discoveryServer struct {
+	components []string // resource IDs returned by Resource Graph, unsorted on purpose
+	status     map[string]int
+	hasRow     map[string]bool
+	mu         sync.Mutex
+	hits       map[string]int
+}
+
+func (d *discoveryServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	w.Header().Set("Content-Type", "application/json")
+	if strings.HasSuffix(r.URL.Path, "/providers/Microsoft.ResourceGraph/resources") {
+		rows := make([]map[string]string, 0, len(d.components))
+		for _, id := range d.components {
+			rows = append(rows, map[string]string{"id": id, "subscriptionId": "sub-" + id[len(id)-1:]})
+		}
+		raw, _ := json.Marshal(map[string]any{"data": rows})
+		_, _ = w.Write(raw)
+		return
+	}
+	// Path is /v1/apps/<name>/query.
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	name := parts[len(parts)-2]
+	d.hits[name]++
+	code := http.StatusOK
+	if c, ok := d.status[name]; ok {
+		code = c
+	}
+	if code != http.StatusOK {
+		w.WriteHeader(code)
+		_, _ = io.WriteString(w, `{"error":{"code":"AuthorizationFailed"}}`)
+		return
+	}
+	rows := "[]"
+	if d.hasRow[name] {
+		rows = `[["2026-11-18T19:45:00Z"]]`
+	}
+	_, _ = io.WriteString(w, `{"tables":[{"name":"PrimaryResult","columns":[],"rows":`+rows+`}]}`)
+}
+
+func componentID(name string) string {
+	return "/subscriptions/sub-" + name[len(name)-1:] + "/resourceGroups/rg/providers/microsoft.insights/components/" + name
+}
+
+func newDiscoveryDsInfo(url string, client *http.Client) types.DatasourceInfo {
+	return types.DatasourceInfo{
+		Services: map[string]types.DatasourceService{
+			"Azure Resource Graph": {URL: url, HTTPClient: client},
+			"Azure Log Analytics":  {URL: url, HTTPClient: client},
+		},
+	}
+}
+
+func TestDiscoverExemplarComponent(t *testing.T) {
+	t.Run("picks the component that has the trace, even when it is not first", func(t *testing.T) {
+		d := &discoveryServer{
+			components: []string{componentID("app-b"), componentID("app-a")},
+			hasRow:     map[string]bool{"app-a": true},
+			hits:       map[string]int{},
+		}
+		svr := httptest.NewServer(d)
+		defer svr.Close()
+
+		got, err := discoverExemplarComponent(context.Background(), newDiscoveryDsInfo(svr.URL, svr.Client()), testOperationID, testTimeRange(), log.DefaultLogger)
+		require.NoError(t, err)
+		require.Equal(t, componentID("app-a"), got)
+		require.Equal(t, 1, d.hits["app-b"], "app-b shares the first batch and must be checked")
+	})
+
+	t.Run("skips a component that returns 403 and uses the next match", func(t *testing.T) {
+		d := &discoveryServer{
+			components: []string{componentID("app-a"), componentID("app-b")},
+			status:     map[string]int{"app-a": http.StatusForbidden},
+			hasRow:     map[string]bool{"app-b": true},
+			hits:       map[string]int{},
+		}
+		svr := httptest.NewServer(d)
+		defer svr.Close()
+
+		got, err := discoverExemplarComponent(context.Background(), newDiscoveryDsInfo(svr.URL, svr.Client()), testOperationID, testTimeRange(), log.DefaultLogger)
+		require.NoError(t, err)
+		require.Equal(t, componentID("app-b"), got)
+	})
+
+	t.Run("no match reports checked components and skipped count", func(t *testing.T) {
+		d := &discoveryServer{
+			components: []string{componentID("app-a"), componentID("app-b")},
+			hits:       map[string]int{},
+		}
+		svr := httptest.NewServer(d)
+		defer svr.Close()
+
+		_, err := discoverExemplarComponent(context.Background(), newDiscoveryDsInfo(svr.URL, svr.Client()), testOperationID, testTimeRange(), log.DefaultLogger)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "2 Application Insights components")
+		require.Contains(t, err.Error(), "skipped 0")
+		require.Contains(t, err.Error(), "app-a")
+		require.Contains(t, err.Error(), "app-b")
+		require.NotContains(t, err.Error(), "first 25")
+	})
+
+	t.Run("truncated list says so in the error", func(t *testing.T) {
+		var ids []string
+		hits := map[string]int{}
+		for i := 0; i < exemplarComponentCap+1; i++ {
+			ids = append(ids, componentID(fmt.Sprintf("app-%02d", i)))
+		}
+		d := &discoveryServer{components: ids, hits: hits}
+		svr := httptest.NewServer(d)
+		defer svr.Close()
+
+		_, err := discoverExemplarComponent(context.Background(), newDiscoveryDsInfo(svr.URL, svr.Client()), testOperationID, testTimeRange(), log.DefaultLogger)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), fmt.Sprintf("first %d", exemplarComponentCap))
+		require.Len(t, hits, exemplarComponentCap, "components past the cap must not be checked")
+	})
 }

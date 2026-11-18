@@ -7,12 +7,15 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path"
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
+	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 
 	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/types"
 )
@@ -175,4 +178,81 @@ func componentHasOperation(ctx context.Context, dsInfo types.DatasourceInfo, com
 		return componentAbsent, nil
 	}
 	return componentHasTrace, nil
+}
+
+// exemplarCheckParallelism bounds concurrent KQL checks per batch.
+const exemplarCheckParallelism = 4
+
+// discoverExemplarComponent returns the resource ID of the readable Application Insights component
+// that holds operationID. Components are checked in batches of exemplarCheckParallelism, ordered by
+// resource ID. If several components in one batch have the trace, the lowest ID wins.
+func discoverExemplarComponent(ctx context.Context, dsInfo types.DatasourceInfo, operationID string, timeRange backend.TimeRange, logger log.Logger) (string, error) {
+	if !operationIDPattern.MatchString(operationID) {
+		return "", fmt.Errorf("invalid operation id for trace exemplar lookup")
+	}
+
+	components, truncated, err := listReadableAppInsightsComponents(ctx, dsInfo)
+	if err != nil {
+		return "", err
+	}
+	if len(components) == 0 {
+		return "", backend.DownstreamError(fmt.Errorf("no readable Application Insights components"))
+	}
+
+	var checked []string
+	var skipped []string
+	for start := 0; start < len(components); start += exemplarCheckParallelism {
+		end := start + exemplarCheckParallelism
+		if end > len(components) {
+			end = len(components)
+		}
+		batch := components[start:end]
+		results := make([]componentCheck, len(batch))
+
+		var wg sync.WaitGroup
+		for i, component := range batch {
+			wg.Add(1)
+			go func(i int, component appInsightsComponent) {
+				defer wg.Done()
+				status, checkErr := componentHasOperation(ctx, dsInfo, component.ID, operationID, timeRange)
+				if checkErr != nil {
+					logger.Warn("exemplar component check failed", "component", component.ID, "err", checkErr)
+					results[i] = componentSkipped
+					return
+				}
+				results[i] = status
+			}(i, component)
+		}
+		wg.Wait()
+
+		var match string
+		for i, status := range results {
+			name := path.Base(batch[i].ID)
+			checked = append(checked, name)
+			switch status {
+			case componentHasTrace:
+				if match == "" || batch[i].ID < match {
+					match = batch[i].ID
+				}
+			case componentSkipped:
+				skipped = append(skipped, fmt.Sprintf("%s (subscription %s)", name, batch[i].SubscriptionID))
+			}
+		}
+		if match != "" {
+			return match, nil
+		}
+	}
+
+	msg := fmt.Sprintf(
+		"trace %s was not found in %d Application Insights components this identity can read (checked: %s; skipped %d",
+		operationID, len(checked), strings.Join(checked, ", "), len(skipped),
+	)
+	if len(skipped) > 0 {
+		msg += ": " + strings.Join(skipped, ", ")
+	}
+	msg += ")"
+	if truncated {
+		msg += fmt.Sprintf("; only the first %d components ordered by resource id were checked", exemplarComponentCap)
+	}
+	return "", backend.DownstreamError(fmt.Errorf("%s", msg))
 }
