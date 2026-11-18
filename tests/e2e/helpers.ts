@@ -80,6 +80,9 @@ export interface LiveCredentials {
   clientSecret: string;
 }
 
+export const CLOUD_INSTANCE_SKIP_REASON =
+  'Fails on the shared Cloud instance until https://github.com/grafana/grafana-azure-monitor-datasource/pull/177 merges';
+
 export const LIVE_CREDENTIALS_SKIP_REASON =
   'Requires DS_INSTANCE_TENANT_ID, DS_INSTANCE_CLIENT_ID and DS_INSTANCE_CLIENT_SECRET';
 

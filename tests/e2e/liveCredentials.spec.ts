@@ -13,6 +13,7 @@ import { AzureQueryType, ResultFormat } from '../../src/dataquery';
 import { components } from '../../src/e2e/selectors';
 
 import {
+  CLOUD_INSTANCE_SKIP_REASON,
   LIVE_CREDENTIALS_SKIP_REASON,
   PLUGIN_TYPE,
   QUERY_DATA_URL,
@@ -60,6 +61,7 @@ test.describe('Config editor', () => {
   test.describe('save & test', () => {
     test.describe('with live credentials', () => {
       test('should pass the health check', async ({ createDataSourceConfigPage, page }) => {
+        test.skip(isCloudRun, CLOUD_INSTANCE_SKIP_REASON);
         const configPage = await createDataSourceConfigPage({ type: PLUGIN_TYPE });
         await fillClientSecretCredentials(
           page,
@@ -268,6 +270,7 @@ test.describe('Azure Monitor datasource', () => {
     selectors,
     page,
   }) => {
+    test.skip(isCloudRun, CLOUD_INSTANCE_SKIP_REASON);
     test.fail(isCloudRun, CLOUD_VERSION_CONFLICT_REASON);
     test.setTimeout(120_000);
     await createLiveDataSourceInConfigEditor(createDataSourceConfigPage, page, selectors);
@@ -324,6 +327,7 @@ test.describe('Azure Monitor datasource', () => {
     page,
     selectors,
   }) => {
+    test.skip(isCloudRun, CLOUD_INSTANCE_SKIP_REASON);
     test.fail(isCloudRun, CLOUD_VERSION_CONFLICT_REASON);
     test.fail(true, RESOURCE_PICKER_RESET_REASON);
     test.setTimeout(120_000);

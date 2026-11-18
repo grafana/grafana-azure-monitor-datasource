@@ -4,6 +4,7 @@ import { components } from '../../src/e2e/selectors';
 import type { AzureMonitorDataSourceJsonData, AzureMonitorDataSourceSecureJsonData } from '../../src/types/types';
 
 import {
+  CLOUD_INSTANCE_SKIP_REASON,
   PLACEHOLDER_CLIENT_ID,
   PLACEHOLDER_SUBSCRIPTION,
   PLACEHOLDER_TENANT_ID,
@@ -29,6 +30,7 @@ test.describe('Config editor', () => {
       createDataSourceConfigPage,
       page,
     }) => {
+      test.skip(isCloudRun, CLOUD_INSTANCE_SKIP_REASON);
       await createDataSourceConfigPage({ type: PLUGIN_TYPE });
 
       await expect(page.getByTestId(configEditor.authType.select)).toContainText('App Registration (Client Secret)');
@@ -48,6 +50,7 @@ test.describe('Config editor', () => {
       page,
       selectors,
     }) => {
+      test.skip(isCloudRun, CLOUD_INSTANCE_SKIP_REASON);
       const configPage = await createDataSourceConfigPage({ type: PLUGIN_TYPE });
 
       await page.getByTestId(configEditor.authType.select).getByRole('combobox').click();
@@ -134,6 +137,7 @@ test.describe('Config editor', () => {
 
   test.describe('save & test', () => {
     test('should show an error alert when the health check fails', async ({ createDataSourceConfigPage, page }) => {
+      test.skip(isCloudRun, CLOUD_INSTANCE_SKIP_REASON);
       const configPage = await createDataSourceConfigPage({ type: PLUGIN_TYPE });
       await fillClientSecretCredentials(
         page,
@@ -151,6 +155,7 @@ test.describe('Config editor', () => {
       createDataSourceConfigPage,
       page,
     }) => {
+      test.skip(isCloudRun, CLOUD_INSTANCE_SKIP_REASON);
       const configPage = await createDataSourceConfigPage({ type: PLUGIN_TYPE });
       await fillClientSecretCredentials(
         page,
@@ -168,6 +173,7 @@ test.describe('Config editor', () => {
       createDataSourceConfigPage,
       page,
     }) => {
+      test.skip(isCloudRun, CLOUD_INSTANCE_SKIP_REASON);
       await mockSubscriptions(page);
       const configPage = await createDataSourceConfigPage({ type: PLUGIN_TYPE });
       await fillClientSecretCredentials(
