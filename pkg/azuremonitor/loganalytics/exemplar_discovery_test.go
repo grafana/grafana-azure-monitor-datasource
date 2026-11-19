@@ -113,13 +113,14 @@ func testTimeRange() backend.TimeRange {
 
 func TestComponentHasOperation(t *testing.T) {
 	tests := []struct {
-		name      string
-		status    int
-		body      string
-		operation string
-		expected  componentCheck
-		expectHit bool
-		expectErr bool
+		name       string
+		status     int
+		body       string
+		operation  string
+		expected   componentCheck
+		expectHit  bool
+		expectErr  bool
+		expectSkip bool
 	}{
 		{
 			name:      "row returned means the trace is in this component",
@@ -138,12 +139,13 @@ func TestComponentHasOperation(t *testing.T) {
 			expectHit: true,
 		},
 		{
-			name:      "403 skips the component without failing the lookup",
-			status:    http.StatusForbidden,
-			body:      `{"error":{"code":"AuthorizationFailed"}}`,
-			operation: testOperationID,
-			expected:  componentSkipped,
-			expectHit: true,
+			name:       "403 skips the component without failing the lookup",
+			status:     http.StatusForbidden,
+			body:       `{"error":{"code":"AuthorizationFailed"}}`,
+			operation:  testOperationID,
+			expected:   componentSkipped,
+			expectHit:  true,
+			expectSkip: true,
 		},
 		{
 			name:      "operation id outside hex is rejected before any request",
@@ -180,10 +182,15 @@ func TestComponentHasOperation(t *testing.T) {
 				require.Equal(t, 0, hits, "invalid operation id must not reach the server")
 				return
 			}
-			require.NoError(t, err)
+			if tt.expectSkip {
+				require.Error(t, err, "a skipped component must say why")
+				require.Contains(t, err.Error(), "403")
+			} else {
+				require.NoError(t, err)
+			}
 			require.Equal(t, tt.expected, got)
 			require.Equal(t, 1, hits)
-			require.True(t, strings.HasSuffix(gotPath, "/v1/apps/app-a/query"), "path was %s", gotPath)
+			require.True(t, strings.HasSuffix(gotPath, "/providers/microsoft.insights/components/app-a/query"), "path was %s", gotPath)
 			require.Contains(t, gotQuery, fmt.Sprintf("operation_Id == '%s'", tt.operation))
 			require.Contains(t, gotQuery, "take 1")
 		})
@@ -213,7 +220,7 @@ func (d *discoveryServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(raw)
 		return
 	}
-	// Path is /v1/apps/<name>/query.
+	// Path is .../components/<name>/query.
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	name := parts[len(parts)-2]
 	d.hits[name]++

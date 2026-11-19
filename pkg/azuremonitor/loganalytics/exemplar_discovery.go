@@ -130,8 +130,9 @@ const (
 var operationIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{1,64}$`)
 
 // componentHasOperation runs a one-row KQL query against one Application Insights component.
-// The error return is non-nil only for requests that cannot be built. Any HTTP failure from the
-// component is reported as componentSkipped so one unreadable component does not fail the lookup.
+// Any failure that is specific to the component (HTTP error, transport error, bad response) returns
+// componentSkipped with a non-nil error. The caller logs the error and moves on, so one unreadable
+// component does not fail the lookup.
 func componentHasOperation(ctx context.Context, dsInfo types.DatasourceInfo, componentID, operationID string, timeRange backend.TimeRange) (componentCheck, error) {
 	if !operationIDPattern.MatchString(operationID) {
 		return componentAbsent, fmt.Errorf("invalid operation id for trace exemplar lookup")
@@ -153,7 +154,8 @@ func componentHasOperation(ctx context.Context, dsInfo types.DatasourceInfo, com
 		return componentAbsent, err
 	}
 
-	endpoint := strings.TrimRight(svc.URL, "/") + "/" + getApiURL(componentID, true, false)
+	// Query by resource ID. The name-based /v1/apps/{name}/query route returns 404 for these components.
+	endpoint := strings.TrimRight(svc.URL, "/") + "/" + getApiURL(componentID, false, false)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(raw))
 	if err != nil {
 		return componentAbsent, err
@@ -162,16 +164,17 @@ func componentHasOperation(ctx context.Context, dsInfo types.DatasourceInfo, com
 
 	res, err := svc.HTTPClient.Do(req)
 	if err != nil {
-		return componentSkipped, nil
+		return componentSkipped, fmt.Errorf("presence check request failed: %w", err)
 	}
 	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode/100 != 2 {
-		return componentSkipped, nil
+		body, _ := io.ReadAll(io.LimitReader(res.Body, 300))
+		return componentSkipped, fmt.Errorf("presence check returned %s: %s", res.Status, strings.TrimSpace(string(body)))
 	}
 
 	var parsed AzureLogAnalyticsResponse
 	if err := json.NewDecoder(res.Body).Decode(&parsed); err != nil {
-		return componentSkipped, nil
+		return componentSkipped, fmt.Errorf("presence check response could not be decoded: %w", err)
 	}
 	table, err := parsed.GetPrimaryResultTable()
 	if err != nil || len(table.Rows) == 0 {

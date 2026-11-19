@@ -279,7 +279,8 @@ func buildAppInsightsQuery(ctx context.Context, query backend.DataQuery, dsInfo 
 		return nil, err
 	}
 
-	apiURL := getApiURL(resourceOrWorkspace, appInsightsQuery, false)
+	// A discovered component is queried by resource ID. The name-based App Insights route returns 404 for it.
+	apiURL := getApiURL(resourceOrWorkspace, appInsightsQuery && discoveredComponent == "", false)
 
 	rawQuery, err := macros.KqlInterpolate(query, dsInfo, queryString, "TimeGenerated")
 	if err != nil {

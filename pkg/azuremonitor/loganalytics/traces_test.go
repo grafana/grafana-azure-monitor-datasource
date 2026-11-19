@@ -1317,7 +1317,7 @@ func TestBuildAppInsightsQuery_ExemplarDiscovery(t *testing.T) {
 			w.WriteHeader(http.StatusForbidden)
 		case strings.HasSuffix(path, "/providers/Microsoft.ResourceGraph/resources"):
 			_, _ = io.WriteString(w, fmt.Sprintf(`{"data":[{"id":%q,"subscriptionId":"sub"}]}`, componentResourceID))
-		case strings.HasSuffix(path, "/v1/apps/"+componentName+"/query"):
+		case strings.HasSuffix(path, "/components/"+componentName+"/query"):
 			_, _ = io.WriteString(w, `{"tables":[{"name":"PrimaryResult","columns":[],"rows":[["2026-11-18T19:45:00Z"]]}]}`)
 		case strings.Contains(strings.ToLower(path), "/providers/microsoft.insights/transactions/"):
 			correlationRes := AzureCorrelationAPIResponse{
@@ -1371,6 +1371,6 @@ func TestBuildAppInsightsQuery_ExemplarDiscovery(t *testing.T) {
 	// Resource IDs are lowercased in the correlation set, so compare case-insensitively.
 	require.Len(t, built.Resources, 1)
 	require.True(t, strings.EqualFold(componentResourceID, built.Resources[0]), "got %s", built.Resources[0])
-	require.Contains(t, built.URL, "v1/apps/"+componentName+"/query")
+	require.Contains(t, built.URL, "/components/"+componentName+"/query")
 	require.False(t, subscriptionsHit, "exemplar discovery must not list subscriptions")
 }
