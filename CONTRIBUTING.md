@@ -142,9 +142,19 @@ npm run e2e
 
 ## Release
 
-You need commit access to the repository to publish a release.
+[release-please](https://github.com/googleapis/release-please) creates releases. Don't change the version in `package.json` or edit `CHANGELOG.md` by hand.
 
-1. Update the version number in `package.json`.
-2. Update `CHANGELOG.md` with the changes included in the release.
-3. Open a PR with the changes and merge it.
-4. Follow the release process described [here](https://enghub.grafana-ops.net/docs/default/component/grafana-plugins-platform/plugins-ci-github-actions/010-plugins-ci-github-actions/#cd_1).
+Title each pull request as a [Conventional Commit](https://www.conventionalcommits.org/), for example `fix(resource-picker): keep advanced values and searches when the query editor re-renders`. The repository squash-merges, so the title becomes the commit subject that release-please reads. The **PR Title** check enforces the format, and the subject must start with a lowercase letter.
+
+1. After each merge to `main`, release-please opens or updates a release pull request titled `chore(main): release X.Y.Z`. It bumps the version and adds a `CHANGELOG.md` section built from the commit subjects since the last release.
+2. To publish the release, merge the release pull request. The merge creates the `vX.Y.Z` tag and the GitHub release, and publishes that version to the Grafana plugin catalog. The release also builds the bundled backend image from the tag and starts its rollout to Grafana Cloud.
+
+The commit type sets the version bump:
+
+- `feat` bumps the minor version.
+- A breaking change, marked with `!` after the type or with a `BREAKING CHANGE:` footer, bumps the major version.
+- Every other type except `chore` bumps the patch version. `chore` commits don't appear in the changelog and don't start a release.
+
+Routine dependency updates use `chore(deps)`, so they don't start a release. Security updates use `fix(deps)`, so they start a release. To release a routine update on its own, add a `Release-As: X.Y.Z` footer to the commit message.
+
+To publish outside this flow, for example an emergency fix for on-premises users or a docs-only update, run the **Plugins - Publish plugin** workflow (`.github/workflows/publish.yml`) manually.
