@@ -1,6 +1,4 @@
-## Unreleased
-
-- Fix the resource picker discarding typed Advanced values and searches when the query editor updates
+# Changelog
 
 ## 13.1.0
 
