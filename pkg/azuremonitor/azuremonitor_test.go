@@ -466,13 +466,11 @@ func TestCheckHealth(t *testing.T) {
 				}},
 		},
 		{
-			name:          "Successfully returns UNKNOWN status if no log analytics workspace is found",
+			name:          "Successfully connects when no log analytics workspace is found",
 			errorExpected: false,
 			expectedResult: &backend.CheckHealthResult{
-				Status:  backend.HealthStatusUnknown,
-				Message: "One or more health checks failed. See details below.",
-				JSONDetails: []byte(
-					`{"verboseMessage": "1. Successfully connected to Azure Monitor endpoint.\n2. No Log Analytics workspaces found.\n3. Successfully connected to Azure Resource Graph endpoint." }`),
+				Status:  backend.HealthStatusOk,
+				Message: "Successfully connected to Azure Monitor and Azure Resource Graph endpoints. No Log Analytics workspaces found.",
 			},
 			customServices: map[string]types.DatasourceService{
 				azureMonitor: {
@@ -534,6 +532,44 @@ func TestCheckHealth(t *testing.T) {
 				assert.NoError(t, err)
 			}
 			assert.Equal(t, tt.expectedResult, res)
+		})
+	}
+}
+
+func TestLogAnalyticsCheckHealthWorkspaceErrors(t *testing.T) {
+	const errorBody = `{"error":{"message":"workspace lookup failed"}}`
+	tests := []struct {
+		name       string
+		statusCode int
+		body       string
+		message    string
+	}{
+		{"Unauthorized", http.StatusUnauthorized, errorBody, "workspace lookup failed"},
+		{"Forbidden", http.StatusForbidden, errorBody, "workspace lookup failed"},
+		{"Internal Server Error", http.StatusInternalServerError, errorBody, "workspace lookup failed"},
+		{"Missing workspace list", http.StatusOK, `{}`, "workspace list response is missing value"},
+		{"Null workspace list", http.StatusOK, `{"value":null}`, "workspace list response is missing value"},
+		{"Error envelope", http.StatusOK, errorBody, "workspace list response is missing value"},
+		{"Invalid JSON", http.StatusOK, `{"value":`, "unexpected EOF"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dsInfo := types.DatasourceInfo{
+				Routes: testRoutes,
+				Services: map[string]types.DatasourceService{
+					azureMonitor: {
+						HTTPClient: NewTestClient(func(req *http.Request) (*http.Response, error) {
+							return &http.Response{
+								StatusCode: tt.statusCode,
+								Body:       io.NopCloser(strings.NewReader(tt.body)),
+							}, nil
+						}),
+					},
+				},
+			}
+			message, status := logAnalyticsCheckHealth(context.Background(), dsInfo, "subscription-id")
+			assert.Equal(t, backend.HealthStatusError, status)
+			assert.Contains(t, message, tt.message)
 		})
 	}
 }
