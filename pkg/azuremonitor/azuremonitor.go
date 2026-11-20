@@ -23,6 +23,7 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/config"
 
 	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/azmoncredentials"
+	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/healthmodels"
 	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/loganalytics"
 	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/metrics"
 	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/resourcegraph"
@@ -40,6 +41,7 @@ func NewDatasource(ctx context.Context, settings backend.DataSourceInstanceSetti
 		azureResourceGraph: &resourcegraph.AzureResourceGraphDatasource{Proxy: proxy, Logger: logger},
 		azureTraces:        &loganalytics.AzureLogAnalyticsDatasource{Proxy: proxy, Logger: logger},
 		traceExemplar:      &loganalytics.AzureLogAnalyticsDatasource{Proxy: proxy, Logger: logger},
+		azureHealthModels:  &healthmodels.Datasource{},
 	}
 
 	instance, err := NewInstanceSettings(clientProvider, executors, logger)(ctx, settings)
@@ -170,6 +172,11 @@ func NewInstanceSettings(clientProvider *httpclient.Provider, executors map[stri
 		}
 
 		for routeName := range executors {
+			if routeName == azureHealthModels {
+				if _, ok := routesForModel[routeName]; !ok {
+					continue
+				}
+			}
 			service, err := getDatasourceService(ctx, &settings, azureSettings, clientProvider, model, routeName, logger)
 			if err != nil {
 				return nil, err
@@ -234,6 +241,15 @@ func (ds *DataSource) newQueryMux() *datasource.QueryTypeMux {
 			dsInfo.Namespace = req.PluginContext.Namespace
 			service, ok := dsInfo.Services[dst]
 			if !ok {
+				if dst == azureHealthModels {
+					responses := backend.NewQueryDataResponse()
+					for _, query := range req.Queries {
+						responses.Responses[query.RefID] = backend.ErrorResponseWithErrorSource(backend.DownstreamError(
+							fmt.Errorf("Health Models is not configured for this Azure cloud; configure an explicit Health Models customized route"),
+						))
+					}
+					return responses, nil
+				}
 				return nil, fmt.Errorf("missing service for %s", dst)
 			}
 			// FromAlert header is defined in pkg/services/ngalert/models/constants.go

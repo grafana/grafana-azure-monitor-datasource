@@ -176,6 +176,8 @@ export default class Datasource extends DataSourceWithBackend<AzureMonitorQuery,
       subQuery = JSON.stringify(query.azureLogAnalytics);
     } else if (query.queryType === AzureQueryType.AzureResourceGraph) {
       subQuery = JSON.stringify([query.azureResourceGraph, query.subscriptions]);
+    } else if (query.queryType === AzureQueryType.AzureHealthModels) {
+      subQuery = JSON.stringify(query.azureHealthModels);
     }
 
     return !!subQuery && this.templateSrv.containsTemplate(subQuery);
@@ -352,8 +354,7 @@ function hasQueryForType(query: AzureMonitorQuery): boolean {
       return !!query.azureTraces;
 
     case AzureQueryType.AzureHealthModels:
-      // TODO: Enable health models queries once backend query support is available.
-      return false;
+      return !!query.azureHealthModels;
 
     case AzureQueryType.GrafanaTemplateVariableFn:
       return !!query.grafanaTemplateVariableFn;

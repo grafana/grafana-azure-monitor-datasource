@@ -28,6 +28,7 @@ const (
 	RouteAzurePortal              = "Azure Portal"
 	RouteTraceExemplar            = "traceql"
 	RouteAzureMonitorBatchMetrics = "Azure Monitor Batch Metrics"
+	RouteAzureHealthModels        = "Azure Health Models"
 )
 
 type AzRoute struct {

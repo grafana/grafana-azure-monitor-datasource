@@ -66,6 +66,12 @@ var testRoutes = map[string]types.AzRoute{
 		Headers: map[string]string{"x-ms-app": "Grafana"},
 		Timeout: defaultMetricsTimeout,
 	},
+	azureHealthModels: {
+		URL:     "https://data.cloudhealth.azure.com",
+		Scopes:  []string{"https://data.cloudhealth.azure.com/.default"},
+		Headers: map[string]string{"x-ms-app": "Grafana"},
+		Timeout: defaultMetricsTimeout,
+	},
 }
 
 func TestNewInstanceSettings(t *testing.T) {

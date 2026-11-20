@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 
+import { LoadingState, type PanelData } from '@grafana/data';
+import { getTemplateSrv } from '@grafana/runtime';
 import { EditorFieldGroup, EditorRow, EditorRows } from '@grafana/plugin-ui';
 import { type ComboboxOption } from '@grafana/ui';
 
@@ -18,6 +20,8 @@ interface HealthModelsQueryEditorProps {
   subscriptionId?: string;
   variableOptionGroup?: VariableOptionGroup;
   onChange: (newQuery: AzureMonitorQuery) => void;
+  onQueryChange?: (newQuery: AzureMonitorQuery) => void;
+  data?: PanelData;
   setError: (source: string, error: AzureMonitorErrorish | undefined) => void;
 }
 
@@ -35,6 +39,8 @@ const HealthModelsQueryEditor = ({
   subscriptionId,
   variableOptionGroup,
   onChange,
+  onQueryChange,
+  data,
   setError,
 }: HealthModelsQueryEditorProps) => {
   const [subscriptions, setSubscriptions] = useState<Array<ComboboxOption<string>>>([]);
@@ -53,6 +59,57 @@ const HealthModelsQueryEditor = ({
 
   const selectedHealthModelResourceId = query.azureHealthModels?.healthModelResourceId;
   const selectedHealthModelsQueryType = query.azureHealthModels?.queryType;
+
+  useEffect(() => {
+    if (!onQueryChange || data?.state !== LoadingState.Done || !selectedHealthModelResourceId) {
+      return;
+    }
+    const requestTarget = data.request?.targets.find((target) => target.refId === query.refId);
+    if (data.request && requestTarget?.datasource?.uid !== datasource.uid) {
+      return;
+    }
+    const modelID = getTemplateSrv().replace(selectedHealthModelResourceId, data.request?.scopedVars);
+    const subscription = getTemplateSrv().replace(selectedSubscription || '', data.request?.scopedVars);
+    if (modelID.split('/')[2]?.toLowerCase() !== subscription.toLowerCase()) {
+      return;
+    }
+    for (const frame of data.series) {
+      const metadata = frame.meta?.custom;
+      if (
+        frame.refId !== query.refId ||
+        typeof metadata?.healthModelResourceId !== 'string' ||
+        metadata.healthModelResourceId.toLowerCase() !== modelID.toLowerCase() ||
+        typeof metadata.dataplaneUrl !== 'string' ||
+        !metadata.dataplaneUrl ||
+        typeof metadata.dataplaneModel?.id !== 'string' ||
+        metadata.dataplaneModel.id.toLowerCase() !== modelID.toLowerCase() ||
+        typeof metadata.dataplaneModel.name !== 'string' ||
+        !metadata.dataplaneModel.name ||
+        (metadata.dataplaneModel.location !== undefined && typeof metadata.dataplaneModel.location !== 'string')
+      ) {
+        continue;
+      }
+      const { id, name, location } = metadata.dataplaneModel;
+      const saved = query.azureHealthModels;
+      if (
+        saved?.dataplaneUrl !== metadata.dataplaneUrl ||
+        saved.dataplaneModel?.id !== id ||
+        saved.dataplaneModel?.name !== name ||
+        saved.dataplaneModel?.location !== location
+      ) {
+        // Persist discovery without triggering another health query.
+        onQueryChange({
+          ...query,
+          azureHealthModels: {
+            ...saved,
+            dataplaneUrl: metadata.dataplaneUrl,
+            dataplaneModel: { id, name, location },
+          },
+        });
+      }
+      break;
+    }
+  }, [data, datasource, onQueryChange, query, selectedHealthModelResourceId, selectedSubscription]);
   const subscriptionOptions = variableOptionGroup
     ? [
         ...subscriptions,
@@ -147,6 +204,8 @@ const HealthModelsQueryEditor = ({
       azureHealthModels: {
         ...query.azureHealthModels,
         healthModelResourceId: topHealthModelResourceId,
+        dataplaneUrl: undefined,
+        dataplaneModel: undefined,
         queryType: query.azureHealthModels?.queryType ?? DEFAULT_HEALTH_MODELS_QUERY_TYPE,
       },
     });
@@ -176,6 +235,8 @@ const HealthModelsQueryEditor = ({
       azureHealthModels: {
         ...query.azureHealthModels,
         healthModelResourceId: undefined,
+        dataplaneUrl: undefined,
+        dataplaneModel: undefined,
       },
     });
   };
@@ -188,6 +249,8 @@ const HealthModelsQueryEditor = ({
       azureHealthModels: {
         ...query.azureHealthModels,
         healthModelResourceId: selection.value,
+        dataplaneUrl: undefined,
+        dataplaneModel: undefined,
         queryType: query.azureHealthModels?.queryType ?? DEFAULT_HEALTH_MODELS_QUERY_TYPE,
       },
     });

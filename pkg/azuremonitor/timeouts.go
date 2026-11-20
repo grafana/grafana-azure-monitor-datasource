@@ -50,7 +50,7 @@ func resolveTimeout(routeName string, settings types.AzureMonitorSettings, legac
 	case types.RouteAzureLogAnalytics, types.RouteAzureTraces, types.RouteTraceExemplar:
 		perService = durationFromSeconds(settings.LogsTimeout)
 		fallbackDefault = defaultLogsTimeout
-	case types.RouteAzureMonitor, types.RouteAzureMonitorBatchMetrics, types.RouteAzurePortal:
+	case types.RouteAzureMonitor, types.RouteAzureMonitorBatchMetrics, types.RouteAzurePortal, types.RouteAzureHealthModels:
 		perService = durationFromSeconds(settings.MetricsTimeout)
 		fallbackDefault = defaultMetricsTimeout
 	case types.RouteAzureResourceGraph:
