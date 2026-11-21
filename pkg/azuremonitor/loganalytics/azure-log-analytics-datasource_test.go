@@ -20,6 +20,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/grafana/grafana-azure-sdk-go/v2/azcredentials"
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/httpclient"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
@@ -1352,6 +1353,18 @@ func Test_executeQueryHonoursRetryAfter(t *testing.T) {
 		now = now.Add(maxThrottleHold)
 		require.Error(t, run(ds, svr))
 		require.Equal(t, int32(2), calls.Load())
+	})
+
+	t.Run("user-scoped auth sends every request", func(t *testing.T) {
+		svr, calls := throttlingServer(t, "15")
+		ds := &AzureLogAnalyticsDatasource{Logger: log.NewNullLogger()}
+		dsInfo := types.DatasourceInfo{Credentials: &azcredentials.AadCurrentUserCredentials{}}
+
+		for range 3 {
+			_, err := ds.executeQuery(context.Background(), query, dsInfo, svr.Client(), svr.URL)
+			require.ErrorContains(t, err, "429 Too Many Requests")
+		}
+		require.Equal(t, int32(3), calls.Load())
 	})
 
 	for name, header := range map[string]string{"no Retry-After": "", "a Retry-After that is not seconds": "Fri, 21 Nov 2026 00:00:15 GMT"} {

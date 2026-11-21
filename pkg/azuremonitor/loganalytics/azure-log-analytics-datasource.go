@@ -485,7 +485,8 @@ func (e *AzureLogAnalyticsDatasource) executeQuery(ctx context.Context, query *A
 		}
 	}
 
-	if wait := time.Unix(0, e.throttledUntil.Load()).Sub(timeNow()); wait > 0 {
+	holdThrottle := !utils.IsUserScopedAuth(dsInfo.Credentials)
+	if wait := time.Unix(0, e.throttledUntil.Load()).Sub(timeNow()); holdThrottle && wait > 0 {
 		return nil, backend.DownstreamError(fmt.Errorf("too many requests to Azure Log Analytics (429 Too Many Requests). Grafana sends no request for this data source for %d s, as the Retry-After header from Azure asks", int64((wait+time.Second-1)/time.Second)))
 	}
 
@@ -515,7 +516,7 @@ func (e *AzureLogAnalyticsDatasource) executeQuery(ctx context.Context, query *A
 		}
 	}()
 
-	if res.StatusCode == http.StatusTooManyRequests {
+	if holdThrottle && res.StatusCode == http.StatusTooManyRequests {
 		if seconds, err := strconv.Atoi(res.Header.Get("Retry-After")); err == nil && seconds > 0 {
 			hold := min(time.Duration(seconds)*time.Second, maxThrottleHold)
 			e.throttledUntil.Store(timeNow().Add(hold).UnixNano())

@@ -66,22 +66,6 @@ func subscriptionCacheKey(namespace string, dsId int64, baseUrl, subscriptionId 
 	return fmt.Sprintf("%s|%d|%s|%s", namespace, dsId, baseUrl, subscriptionId)
 }
 
-// isUserScopedAuth reports whether the datasource issues requests with an
-// identity that varies per Grafana user. In those modes persistent caching
-// is unsafe: a user who has lost access to a subscription would continue to
-// receive a cached display name until the TTL expires. Singleflight
-// coalescing within a single burst is still safe and still applied.
-func isUserScopedAuth(creds azcredentials.AzureCredentials) bool {
-	if creds == nil {
-		return false
-	}
-	switch creds.AzureAuthType() {
-	case azcredentials.AzureAuthCurrentUserIdentity, azcredentials.AzureAuthClientSecretObo:
-		return true
-	}
-	return false
-}
-
 var (
 	// Used to convert the aggregation value to the Azure enum for deep linking
 	aggregationTypeMap   = map[string]int{"None": 0, "Total": 1, "Minimum": 2, "Maximum": 3, "Average": 4, "Count": 7}
@@ -434,7 +418,7 @@ func getParams(azJSONModel *dataquery.AzureMetricQuery, query backend.DataQuery)
 }
 
 func (e *AzureMonitorDatasource) retrieveSubscriptionDetails(cli *http.Client, ctx context.Context, subscriptionId string, baseUrl string, dsId int64, namespace string, creds azcredentials.AzureCredentials) (string, error) {
-	userScoped := isUserScopedAuth(creds)
+	userScoped := utils.IsUserScopedAuth(creds)
 	cacheKey := subscriptionCacheKey(namespace, dsId, baseUrl, subscriptionId)
 
 	// Persistent caching is only safe in auth modes where every request from
