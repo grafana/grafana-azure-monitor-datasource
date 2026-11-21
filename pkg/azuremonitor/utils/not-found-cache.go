@@ -6,8 +6,6 @@ import (
 	"regexp"
 	"sync"
 	"time"
-
-	"github.com/grafana/grafana-azure-sdk-go/v2/azcredentials"
 )
 
 var (
@@ -47,17 +45,4 @@ func (c *NotFoundCache) Hold(key string, statusCode int, err error) {
 	if statusCode == http.StatusNotFound && missingResourceCodes.MatchString(err.Error()) {
 		c.entries.Store(key, notFoundEntry{err: err, expiresAt: timeNow().Add(notFoundTTL)})
 	}
-}
-
-// IsUserScopedAuth reports whether the data source sends requests with an identity that varies per Grafana user.
-// Responses must not be cached across requests in these modes, or a user who lost access still gets a cached result.
-func IsUserScopedAuth(creds azcredentials.AzureCredentials) bool {
-	if creds == nil {
-		return false
-	}
-	switch creds.AzureAuthType() {
-	case azcredentials.AzureAuthCurrentUserIdentity, azcredentials.AzureAuthClientSecretObo:
-		return true
-	}
-	return false
 }
