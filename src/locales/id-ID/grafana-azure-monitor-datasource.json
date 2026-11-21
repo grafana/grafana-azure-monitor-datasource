@@ -190,6 +190,15 @@
       "label-group-by": "Kelompokkan berdasarkan",
       "tooltip-group-by": "Atur hasil ke dalam kategori berdasarkan kolom yang ditentukan. \"Kelompokkan berdasarkan\" dapat digunakan secara mandiri untuk membuat daftar nilai unik di kolom-kolom yang dipilih, atau digabungkan dengan fungsi agregat untuk menghasilkan statistik ringkasan untuk setiap kelompok. Saat digunakan sendiri, fungsi ini menghasilkan kombinasi yang berbeda dari kolom yang ditentukan."
     },
+    "health-models-query-editor": {
+      "aria-label-health-model": "",
+      "aria-label-subscription": "",
+      "aria-label-type": "",
+      "label-health-model": "",
+      "label-subscription": "",
+      "label-type": "",
+      "no-health-models-found": ""
+    },
     "kql-preview": {
       "button-hide": "Sembunyikan",
       "button-show": "Tampilkan",
