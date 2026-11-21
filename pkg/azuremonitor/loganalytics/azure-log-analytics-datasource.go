@@ -479,6 +479,13 @@ func (e *AzureLogAnalyticsDatasource) executeQuery(ctx context.Context, query *A
 		}
 	}
 
+	holdNotFound := !utils.IsUserScopedAuth(dsInfo.Credentials)
+	if holdNotFound {
+		if err := e.notFound.Get(query.URL); err != nil {
+			return nil, err
+		}
+	}
+
 	req, err := e.createRequest(ctx, url, query)
 	if err != nil {
 		return nil, err
@@ -507,6 +514,9 @@ func (e *AzureLogAnalyticsDatasource) executeQuery(ctx context.Context, query *A
 
 	logResponse, err := e.unmarshalResponse(res)
 	if err != nil {
+		if holdNotFound {
+			e.notFound.Hold(query.URL, res.StatusCode, err)
+		}
 		return nil, err
 	}
 
