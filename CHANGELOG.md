@@ -1,6 +1,7 @@
 ## Unreleased
 
 - Fix the resource picker discarding typed Advanced values and searches when the query editor updates
+- Stop sending Log Analytics queries to Azure while a 429 response's Retry-After time runs, and fail them at once with an error that names the limit
 
 ## 13.1.0
 

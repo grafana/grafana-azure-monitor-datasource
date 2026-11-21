@@ -446,6 +446,12 @@ func (e *AzureLogAnalyticsDatasource) buildQuery(ctx context.Context, query back
 // wideFrameCellLimit keeps a wide frame plus its Arrow encode under about 1.3 GiB of heap.
 var wideFrameCellLimit int64 = 25_000_000
 
+var (
+	timeNow = time.Now
+
+	maxThrottleHold = time.Minute
+)
+
 func (e *AzureLogAnalyticsDatasource) executeQuery(ctx context.Context, query *AzureLogAnalyticsQuery, dsInfo types.DatasourceInfo, client *http.Client, url string) (*backend.DataResponse, error) {
 	// If azureLogAnalyticsSameAs is defined and set to false, return an error
 	if sameAs, ok := dsInfo.JSONData["azureLogAnalyticsSameAs"]; ok {
@@ -479,6 +485,10 @@ func (e *AzureLogAnalyticsDatasource) executeQuery(ctx context.Context, query *A
 		}
 	}
 
+	if wait := time.Unix(0, e.throttledUntil.Load()).Sub(timeNow()); wait > 0 {
+		return nil, backend.DownstreamError(fmt.Errorf("too many requests to Azure Log Analytics (429 Too Many Requests). Grafana sends no request for this data source for %d s, as the Retry-After header from Azure asks", int64((wait+time.Second-1)/time.Second)))
+	}
+
 	req, err := e.createRequest(ctx, url, query)
 	if err != nil {
 		return nil, err
@@ -504,6 +514,13 @@ func (e *AzureLogAnalyticsDatasource) executeQuery(ctx context.Context, query *A
 			e.Logger.Warn("Failed to close response body", "err", err)
 		}
 	}()
+
+	if res.StatusCode == http.StatusTooManyRequests {
+		if seconds, err := strconv.Atoi(res.Header.Get("Retry-After")); err == nil && seconds > 0 {
+			hold := min(time.Duration(seconds)*time.Second, maxThrottleHold)
+			e.throttledUntil.Store(timeNow().Add(hold).UnixNano())
+		}
+	}
 
 	logResponse, err := e.unmarshalResponse(res)
 	if err != nil {

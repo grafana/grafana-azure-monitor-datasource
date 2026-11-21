@@ -2,6 +2,7 @@ package loganalytics
 
 import (
 	"encoding/json"
+	"sync/atomic"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
@@ -13,6 +14,8 @@ import (
 type AzureLogAnalyticsDatasource struct {
 	Proxy  types.ServiceProxy
 	Logger log.Logger
+
+	throttledUntil atomic.Int64
 }
 
 // AzureLogAnalyticsQuery is the query request that is built from the saved values for
