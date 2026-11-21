@@ -13,12 +13,14 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/grafana/grafana-azure-sdk-go/v2/azcredentials"
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/httpclient"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
@@ -1292,5 +1294,88 @@ func BenchmarkEncodeQuery(b *testing.B) {
 		if _, err := encodeQuery(query); err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+func Test_executeQueryHonoursRetryAfter(t *testing.T) {
+	now := time.Date(2026, 11, 21, 0, 0, 0, 0, time.UTC)
+	timeNow = func() time.Time { return now }
+	t.Cleanup(func() { timeNow = time.Now })
+
+	query := &AzureLogAnalyticsQuery{
+		RefID:        "A",
+		ResultFormat: dataquery.ResultFormatTable,
+		QueryType:    dataquery.AzureQueryTypeLogAnalytics,
+		JSON:         []byte(`{}`),
+		Query:        "Heartbeat",
+	}
+	throttlingServer := func(t *testing.T, retryAfter string) (*httptest.Server, *atomic.Int32) {
+		var calls atomic.Int32
+		svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			calls.Add(1)
+			if retryAfter != "" {
+				w.Header().Set("Retry-After", retryAfter)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, err := w.Write([]byte(`{"error":{"code":"ThrottledError","message":"Rate limit of 200 per 30 seconds is exceeded."}}`))
+			require.NoError(t, err)
+		}))
+		t.Cleanup(svr.Close)
+		return svr, &calls
+	}
+	run := func(ds *AzureLogAnalyticsDatasource, svr *httptest.Server) error {
+		_, err := ds.executeQuery(context.Background(), query, types.DatasourceInfo{}, svr.Client(), svr.URL)
+		return err
+	}
+
+	t.Run("sends no request until Retry-After ends", func(t *testing.T) {
+		svr, calls := throttlingServer(t, "15")
+		ds := &AzureLogAnalyticsDatasource{Logger: log.NewNullLogger()}
+
+		require.ErrorContains(t, run(ds, svr), "429 Too Many Requests")
+		now = now.Add(14 * time.Second)
+		err := run(ds, svr)
+		require.ErrorContains(t, err, "Retry-After")
+		require.True(t, backend.IsDownstreamError(err))
+		require.Equal(t, int32(1), calls.Load())
+
+		now = now.Add(time.Second)
+		require.ErrorContains(t, run(ds, svr), "429 Too Many Requests")
+		require.Equal(t, int32(2), calls.Load())
+	})
+
+	t.Run("holds for at most a minute", func(t *testing.T) {
+		svr, calls := throttlingServer(t, "3600")
+		ds := &AzureLogAnalyticsDatasource{Logger: log.NewNullLogger()}
+
+		require.Error(t, run(ds, svr))
+		now = now.Add(maxThrottleHold)
+		require.Error(t, run(ds, svr))
+		require.Equal(t, int32(2), calls.Load())
+	})
+
+	t.Run("user-scoped auth sends every request", func(t *testing.T) {
+		svr, calls := throttlingServer(t, "15")
+		ds := &AzureLogAnalyticsDatasource{Logger: log.NewNullLogger()}
+		dsInfo := types.DatasourceInfo{Credentials: &azcredentials.AadCurrentUserCredentials{}}
+
+		for range 3 {
+			_, err := ds.executeQuery(context.Background(), query, dsInfo, svr.Client(), svr.URL)
+			require.ErrorContains(t, err, "429 Too Many Requests")
+		}
+		require.Equal(t, int32(3), calls.Load())
+	})
+
+	for name, header := range map[string]string{"no Retry-After": "", "a Retry-After that is not seconds": "Fri, 21 Nov 2026 00:00:15 GMT"} {
+		t.Run(name+" sends every request", func(t *testing.T) {
+			svr, calls := throttlingServer(t, header)
+			ds := &AzureLogAnalyticsDatasource{Logger: log.NewNullLogger()}
+
+			for range 3 {
+				require.ErrorContains(t, run(ds, svr), "429 Too Many Requests")
+			}
+			require.Equal(t, int32(3), calls.Load())
+		})
 	}
 }
