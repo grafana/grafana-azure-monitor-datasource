@@ -68,6 +68,11 @@ var testRoutes = map[string]types.AzRoute{
 	},
 }
 
+func requireDownstreamError(t require.TestingT, err error, _ ...interface{}) {
+	require.Error(t, err)
+	require.True(t, backend.IsDownstreamError(err), "error %q is not a downstream error", err)
+}
+
 func TestNewInstanceSettings(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -157,6 +162,36 @@ func TestNewInstanceSettings(t *testing.T) {
 			},
 			expectedModel: nil,
 			Err:           require.Error,
+		},
+		{
+			name: "client secret credentials without tenant ID are a downstream error",
+			settings: backend.DataSourceInstanceSettings{
+				JSONData:                []byte(`{"azureCredentials":{"authType":"clientsecret","azureCloud":"AzureCloud","clientId":"test-client"}}`),
+				DecryptedSecureJSONData: map[string]string{"azureClientSecret": "secret"},
+				ID:                      52,
+			},
+			expectedModel: nil,
+			Err:           requireDownstreamError,
+		},
+		{
+			name: "unsupported legacy authentication type is a downstream error",
+			settings: backend.DataSourceInstanceSettings{
+				JSONData:                []byte(`{"azureAuthType":"unknown"}`),
+				DecryptedSecureJSONData: map[string]string{},
+				ID:                      53,
+			},
+			expectedModel: nil,
+			Err:           requireDownstreamError,
+		},
+		{
+			name: "unknown legacy cloud is a downstream error",
+			settings: backend.DataSourceInstanceSettings{
+				JSONData:                []byte(`{"azureAuthType":"clientsecret","cloudName":"unknowncloud","tenantId":"test-tenant","clientId":"test-client"}`),
+				DecryptedSecureJSONData: map[string]string{"clientSecret": "secret"},
+				ID:                      54,
+			},
+			expectedModel: nil,
+			Err:           requireDownstreamError,
 		},
 	}
 

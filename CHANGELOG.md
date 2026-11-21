@@ -1,6 +1,7 @@
 ## Unreleased
 
 - Fix the resource picker discarding typed Advanced values and searches when the query editor updates
+- Fix invalid saved credentials, such as a missing tenant ID, counting as plugin errors instead of downstream errors
 
 ## 13.1.0
 

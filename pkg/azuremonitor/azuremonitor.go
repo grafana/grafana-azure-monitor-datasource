@@ -139,7 +139,7 @@ func NewInstanceSettings(clientProvider *httpclient.Provider, executors map[stri
 
 		credentials, err := azmoncredentials.FromDatasourceData(jsonData, settings.DecryptedSecureJSONData)
 		if err != nil {
-			return nil, fmt.Errorf("error getting credentials: %w", err)
+			return nil, backend.DownstreamError(fmt.Errorf("error getting credentials: %w", err))
 		} else if credentials == nil {
 			credentials = azmoncredentials.GetDefaultCredentials(azureSettings)
 		}
