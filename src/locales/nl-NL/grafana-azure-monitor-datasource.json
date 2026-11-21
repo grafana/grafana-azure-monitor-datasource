@@ -190,6 +190,15 @@
       "label-group-by": "Groeperen op",
       "tooltip-group-by": "Organiseer resultaten in categorieën op basis van gespecificeerde kolommen. Groeperen op kan onafhankelijk worden gebruikt om unieke waarden in geselecteerde kolommen weer te geven, of worden gecombineerd met aggregaatfuncties om samenvattende statistieken voor elke groep te produceren. Wanneer deze optie afzonderlijk wordt gebruikt, retourneert het verschillende combinaties van de gespecificeerde kolommen."
     },
+    "health-models-query-editor": {
+      "aria-label-health-model": "",
+      "aria-label-subscription": "",
+      "aria-label-type": "",
+      "label-health-model": "",
+      "label-subscription": "",
+      "label-type": "",
+      "no-health-models-found": ""
+    },
     "kql-preview": {
       "button-hide": "Verbergen",
       "button-show": "Tonen",

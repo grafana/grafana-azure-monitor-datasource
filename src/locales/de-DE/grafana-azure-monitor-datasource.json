@@ -190,6 +190,15 @@
       "label-group-by": "Gruppieren nach",
       "tooltip-group-by": "Organisieren Sie die Ergebnisse in Kategorien, basierend auf den angegebenen Spalten. „Gruppieren nach“ kann unabhängig verwendet werden, um eindeutige Werte in ausgewählten Spalten aufzulisten, oder mit Aggregatfunktionen kombiniert werden, um zusammenfassende Statistiken für jede Gruppe zu erstellen. Wenn es allein verwendet wird, gibt es unterschiedliche Kombinationen der angegebenen Spalten zurück."
     },
+    "health-models-query-editor": {
+      "aria-label-health-model": "",
+      "aria-label-subscription": "",
+      "aria-label-type": "",
+      "label-health-model": "",
+      "label-subscription": "",
+      "label-type": "",
+      "no-health-models-found": ""
+    },
     "kql-preview": {
       "button-hide": "Ausblenden",
       "button-show": "Anzeigen",

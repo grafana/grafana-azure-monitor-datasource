@@ -190,6 +190,15 @@
       "label-group-by": "分組依據",
       "tooltip-group-by": "根據指定欄位將結果組織成類別。分組依據可單獨用於列出所選欄中的唯一值，或與彙總函數結合，以產生每個群組的摘要統計資料。單獨使用時，它會傳回指定欄位的不同組合。"
     },
+    "health-models-query-editor": {
+      "aria-label-health-model": "",
+      "aria-label-subscription": "",
+      "aria-label-type": "",
+      "label-health-model": "",
+      "label-subscription": "",
+      "label-type": "",
+      "no-health-models-found": ""
+    },
     "kql-preview": {
       "button-hide": "隱藏",
       "button-show": "顯示",
