@@ -96,6 +96,19 @@ func TestListReadableAppInsightsComponents_GraphError(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestListReadableAppInsightsComponents_Forbidden(t *testing.T) {
+	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = io.WriteString(w, `{"error":{"code":"AccessDenied","message":"raw azure body"}}`)
+	}))
+	defer svr.Close()
+
+	_, _, err := listReadableAppInsightsComponents(context.Background(), newARGTestDsInfo(svr.URL, svr.Client()))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "403 Forbidden")
+	require.NotContains(t, err.Error(), "raw azure body")
+}
+
 const testOperationID = "d958cc15dfc4fbaafeb3f5d8a04e3d01"
 
 func newLogsTestDsInfo(url string, client *http.Client) types.DatasourceInfo {

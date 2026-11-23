@@ -80,6 +80,11 @@ func listReadableAppInsightsComponents(ctx context.Context, dsInfo types.Datasou
 		if readErr != nil {
 			return nil, false, backend.DownstreamError(readErr)
 		}
+		if res.StatusCode == http.StatusForbidden {
+			// The caller cannot read any resources, so there is nothing to search. Return a short
+			// message instead of the raw Azure error body.
+			return nil, false, backend.DownstreamError(fmt.Errorf("no Application Insights components are readable by this identity (Azure Resource Graph returned 403 Forbidden)"))
+		}
 		if res.StatusCode/100 != 2 {
 			return nil, false, backend.DownstreamError(fmt.Errorf("resource graph query failed: %s %s", res.Status, payload))
 		}
