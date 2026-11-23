@@ -36,12 +36,21 @@ const (
 	argAPIVersion = "2021-06-01-preview"
 	// argMaxPages bounds how many Resource Graph pages are read when listing components.
 	argMaxPages = 10
-	// componentsQuery lists Application Insights components with their app IDs. It has no
-	// subscription filter, so Resource Graph returns only resources the caller can read.
-	componentsQuery = "resources | where type =~ 'microsoft.insights/components' | project id, subscriptionId, appId = tostring(properties.AppId) | order by subscriptionId asc, id asc"
 	// insufficientAccessCode is the error code Log Analytics returns when a union names a
 	// resource the caller cannot read.
 	insufficientAccessCode = "InsufficientAccessToResource"
+	// exemplarMaxQueries bounds the Log Analytics queries one lookup may send, including retries,
+	// splits, and per-component checks. It is half of Azure Monitor's 200 queries per 30 seconds
+	// per user. Checking exemplarComponentCap components needs 36 union queries when none fail.
+	exemplarMaxQueries = 100
+)
+
+// componentsQuery lists Application Insights components with their app IDs. It has no subscription
+// filter, so Resource Graph returns only resources the caller can read. It returns one row more than
+// exemplarComponentCap so truncation can be reported, which keeps the list to one page.
+var componentsQuery = fmt.Sprintf(
+	"resources | where type =~ 'microsoft.insights/components' | project id, subscriptionId, appId = tostring(properties.AppId) | order by subscriptionId asc, id asc | take %d",
+	exemplarComponentCap+1,
 )
 
 // exemplarUnionBatchSize is how many components one union query spans, derived from the pair limit.
@@ -75,7 +84,7 @@ func listReadableAppInsightsComponents(ctx context.Context, dsInfo types.Datasou
 	var skipToken string
 	var out []appInsightsComponent
 	for page := 0; page < argMaxPages; page++ {
-		options := map[string]string{"resultFormat": "objectArray"}
+		options := map[string]any{"resultFormat": "objectArray", "$top": exemplarComponentCap + 1}
 		if skipToken != "" {
 			options["$skipToken"] = skipToken
 		}
@@ -354,10 +363,22 @@ func queryUnion(ctx context.Context, dsInfo types.DatasourceInfo, batch []appIns
 	return result, nil
 }
 
+// queryBudget counts the Log Analytics queries one lookup may still send.
+type queryBudget struct{ left int }
+
+// take reserves one query, or returns an error when the lookup has used its budget.
+func (b *queryBudget) take() error {
+	if b.left <= 0 {
+		return fmt.Errorf("reached the limit of %d Log Analytics queries for one lookup", exemplarMaxQueries)
+	}
+	b.left--
+	return nil
+}
+
 // checkUnionBatch returns the components in batch that hold operationID. Components without a valid
 // app ID are checked on their own. The rest are checked in union queries. An error means the lookup
-// cannot continue, for example because of throttling or a server failure.
-func checkUnionBatch(ctx context.Context, dsInfo types.DatasourceInfo, batch []appInsightsComponent, operationID string, timeRange backend.TimeRange, logger log.Logger, skipped map[string]string) ([]appInsightsComponent, error) {
+// cannot continue, for example because of throttling, a server failure, or an exhausted budget.
+func checkUnionBatch(ctx context.Context, dsInfo types.DatasourceInfo, batch []appInsightsComponent, operationID string, timeRange backend.TimeRange, logger log.Logger, skipped map[string]string, budget *queryBudget) ([]appInsightsComponent, error) {
 	var unionable, perComponent []appInsightsComponent
 	for _, c := range batch {
 		if appIDPattern.MatchString(c.AppID) {
@@ -370,12 +391,16 @@ func checkUnionBatch(ctx context.Context, dsInfo types.DatasourceInfo, batch []a
 	var matches []appInsightsComponent
 	if len(perComponent) > 0 {
 		logger.Warn("exemplar component has no valid app ID, checking it on its own", "components", len(perComponent))
-		matches = append(matches, checkOneByOne(ctx, dsInfo, perComponent, operationID, timeRange, logger, skipped)...)
+		found, err := checkOneByOne(ctx, dsInfo, perComponent, operationID, timeRange, logger, skipped, budget)
+		if err != nil {
+			return nil, err
+		}
+		matches = append(matches, found...)
 	}
 	if len(unionable) == 0 {
 		return matches, nil
 	}
-	unionMatches, err := checkUnionGroup(ctx, dsInfo, unionable, operationID, timeRange, logger, skipped)
+	unionMatches, err := checkUnionGroup(ctx, dsInfo, unionable, operationID, timeRange, logger, skipped, budget)
 	if err != nil {
 		return nil, err
 	}
@@ -383,33 +408,47 @@ func checkUnionBatch(ctx context.Context, dsInfo types.DatasourceInfo, batch []a
 }
 
 // checkUnionGroup checks components in union queries. Components the caller cannot read are recorded
-// in skipped and the query is retried without them. A query rejected with BadArgumentError is split
-// in half. A single component that is still rejected is checked on its own. Any other failure is
+// in skipped and the query is retried without them. A 403 or 404 means the component whose route
+// carried the query cannot be read, so it is skipped. A query rejected with BadArgumentError is split
+// in half, and a single component that is still rejected is checked on its own. Any other failure is
 // returned, so the lookup stops instead of multiplying requests.
-func checkUnionGroup(ctx context.Context, dsInfo types.DatasourceInfo, batch []appInsightsComponent, operationID string, timeRange backend.TimeRange, logger log.Logger, skipped map[string]string) ([]appInsightsComponent, error) {
+func checkUnionGroup(ctx context.Context, dsInfo types.DatasourceInfo, batch []appInsightsComponent, operationID string, timeRange backend.TimeRange, logger log.Logger, skipped map[string]string, budget *queryBudget) ([]appInsightsComponent, error) {
 	remaining := batch
 	for attempt := 0; attempt < maxUnionAttempts && len(remaining) > 0; attempt++ {
+		if err := budget.take(); err != nil {
+			return nil, err
+		}
 		res, err := queryUnion(ctx, dsInfo, remaining, operationID, timeRange)
 		if err != nil {
 			var failure *unionFailure
-			if !errors.As(err, &failure) || failure.status != http.StatusBadRequest {
+			if !errors.As(err, &failure) {
 				return nil, err
 			}
-			if len(remaining) == 1 {
-				logger.Warn("exemplar union rejected for one component, checking it on its own", "component", remaining[0].ID, "err", err)
-				return checkOneByOne(ctx, dsInfo, remaining, operationID, timeRange, logger, skipped), nil
-			}
-			logger.Warn("exemplar union rejected, splitting batch", "components", len(remaining), "err", err)
-			mid := len(remaining) / 2
-			first, err := checkUnionGroup(ctx, dsInfo, remaining[:mid], operationID, timeRange, logger, skipped)
-			if err != nil {
+			switch failure.status {
+			case http.StatusForbidden, http.StatusNotFound:
+				skipped[remaining[0].ID] = "not readable by this identity"
+				logger.Warn("exemplar component skipped, union route not readable", "component", remaining[0].ID, "status", failure.status)
+				remaining = remaining[1:]
+				continue
+			case http.StatusBadRequest:
+				if len(remaining) == 1 {
+					logger.Warn("exemplar union rejected for one component, checking it on its own", "component", remaining[0].ID, "err", err)
+					return checkOneByOne(ctx, dsInfo, remaining, operationID, timeRange, logger, skipped, budget)
+				}
+				logger.Warn("exemplar union rejected, splitting batch", "components", len(remaining), "err", err)
+				mid := len(remaining) / 2
+				first, err := checkUnionGroup(ctx, dsInfo, remaining[:mid], operationID, timeRange, logger, skipped, budget)
+				if err != nil {
+					return nil, err
+				}
+				second, err := checkUnionGroup(ctx, dsInfo, remaining[mid:], operationID, timeRange, logger, skipped, budget)
+				if err != nil {
+					return nil, err
+				}
+				return append(first, second...), nil
+			default:
 				return nil, err
 			}
-			second, err := checkUnionGroup(ctx, dsInfo, remaining[mid:], operationID, timeRange, logger, skipped)
-			if err != nil {
-				return nil, err
-			}
-			return append(first, second...), nil
 		}
 		if len(res.denied) == 0 {
 			return res.matches, nil
@@ -430,21 +469,25 @@ func checkUnionGroup(ctx context.Context, dsInfo types.DatasourceInfo, batch []a
 		}
 		if len(kept) == len(remaining) {
 			// The denied IDs matched nothing in this batch, so retrying would repeat the same request.
-			return checkOneByOne(ctx, dsInfo, remaining, operationID, timeRange, logger, skipped), nil
+			return checkOneByOne(ctx, dsInfo, remaining, operationID, timeRange, logger, skipped, budget)
 		}
 		remaining = kept
 	}
 	if len(remaining) == 0 {
 		return nil, nil
 	}
-	return checkOneByOne(ctx, dsInfo, remaining, operationID, timeRange, logger, skipped), nil
+	return checkOneByOne(ctx, dsInfo, remaining, operationID, timeRange, logger, skipped, budget)
 }
 
 // checkOneByOne checks each component with its own presence query. It is used for components that
-// cannot go in a union. Components that fail are recorded in skipped.
-func checkOneByOne(ctx context.Context, dsInfo types.DatasourceInfo, components []appInsightsComponent, operationID string, timeRange backend.TimeRange, logger log.Logger, skipped map[string]string) []appInsightsComponent {
+// cannot go in a union. Components that fail are recorded in skipped. An exhausted budget stops the
+// checks and is returned.
+func checkOneByOne(ctx context.Context, dsInfo types.DatasourceInfo, components []appInsightsComponent, operationID string, timeRange backend.TimeRange, logger log.Logger, skipped map[string]string, budget *queryBudget) ([]appInsightsComponent, error) {
 	var matches []appInsightsComponent
 	for _, c := range components {
+		if err := budget.take(); err != nil {
+			return nil, err
+		}
 		status, err := componentHasOperation(ctx, dsInfo, c.ID, operationID, timeRange)
 		if err != nil {
 			logger.Warn("exemplar component check failed", "component", c.ID, "err", err)
@@ -455,7 +498,7 @@ func checkOneByOne(ctx context.Context, dsInfo types.DatasourceInfo, components 
 			matches = append(matches, c)
 		}
 	}
-	return matches
+	return matches, nil
 }
 
 // chunkComponents splits components into consecutive batches of at most size.
@@ -486,8 +529,11 @@ func skippedList(skipped map[string]string, subscriptionByID map[string]string) 
 // resource ID. Batches run one at a time, so the lookup sends one Log Analytics query at a time.
 // The lookup stops at the first batch that has the trace.
 func discoverExemplarComponent(ctx context.Context, dsInfo types.DatasourceInfo, operationID string, timeRange backend.TimeRange, logger log.Logger) (string, error) {
+	if operationID == "" {
+		return "", backend.DownstreamError(fmt.Errorf("trace exemplar lookup needs an operation ID"))
+	}
 	if !operationIDPattern.MatchString(operationID) {
-		return "", fmt.Errorf("invalid operation id for trace exemplar lookup")
+		return "", backend.DownstreamError(fmt.Errorf("operation ID for trace exemplar lookup must be 1 to 64 hex characters"))
 	}
 
 	components, truncated, err := listReadableAppInsightsComponents(ctx, dsInfo)
@@ -504,10 +550,11 @@ func discoverExemplarComponent(ctx context.Context, dsInfo types.DatasourceInfo,
 	}
 	skipped := make(map[string]string)
 	checked := 0
+	budget := &queryBudget{left: exemplarMaxQueries}
 	batches := chunkComponents(components, exemplarUnionBatchSize)
 	for _, batch := range batches {
 		batchSkipped := make(map[string]string)
-		matches, err := checkUnionBatch(ctx, dsInfo, batch, operationID, timeRange, logger, batchSkipped)
+		matches, err := checkUnionBatch(ctx, dsInfo, batch, operationID, timeRange, logger, batchSkipped, budget)
 		if err != nil {
 			return "", backend.DownstreamError(fmt.Errorf("trace exemplar lookup stopped: %w", err))
 		}

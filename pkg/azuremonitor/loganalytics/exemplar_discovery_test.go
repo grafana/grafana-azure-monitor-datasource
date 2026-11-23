@@ -69,6 +69,8 @@ func TestListReadableAppInsightsComponents(t *testing.T) {
 	require.False(t, hasSubscriptions, "first request must not filter by subscription")
 	require.Equal(t, "tok", bodies[1]["options"].(map[string]any)["$skipToken"])
 	require.Contains(t, bodies[0]["query"], "properties.AppId")
+	require.Contains(t, bodies[0]["query"], fmt.Sprintf("take %d", exemplarComponentCap+1))
+	require.Equal(t, float64(exemplarComponentCap+1), bodies[0]["options"].(map[string]any)["$top"])
 }
 
 func TestListReadableAppInsightsComponents_TruncatesAtCap(t *testing.T) {
@@ -223,6 +225,9 @@ type discoveryServer struct {
 	status     map[string]int
 	hasRow     map[string]bool
 	noAppID    map[string]bool // components whose Resource Graph row has no app ID
+	// routeStatus makes union queries routed through a component fail with this HTTP status, as the
+	// service does when the route component itself cannot be read.
+	routeStatus map[string]int
 	// unionStatus, when set, makes every union query fail with this HTTP status and no denial details.
 	// 400 is what the service returns for oversized or rejected queries.
 	unionStatus int
@@ -287,6 +292,12 @@ func (d *discoveryServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if strings.Contains(body["query"], "summarize rows") {
 		d.unions++
+		routeParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+		if code, ok := d.routeStatus[routeParts[len(routeParts)-2]]; ok {
+			w.WriteHeader(code)
+			_, _ = io.WriteString(w, `{"error":{"code":"Forbidden"}}`)
+			return
+		}
 		if d.unionStatus != 0 {
 			w.WriteHeader(d.unionStatus)
 			_, _ = io.WriteString(w, `{"error":{"code":"BadArgumentError","message":"The request had some invalid properties"}}`)
@@ -538,6 +549,75 @@ func TestDiscoverExemplarComponent(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, componentID("app-a"), got)
 		require.Equal(t, 1, d.hits["app-a"], "app-a is checked once on its own")
+	})
+
+	t.Run("a component whose route cannot be read is skipped, not fatal", func(t *testing.T) {
+		d := &discoveryServer{
+			components:  []string{componentID("app-a"), componentID("app-b")},
+			routeStatus: map[string]int{"app-a": http.StatusForbidden},
+			hasRow:      map[string]bool{"app-b": true},
+			hits:        map[string]int{},
+		}
+		svr := httptest.NewServer(d)
+		defer svr.Close()
+
+		got, err := discoverExemplarComponent(context.Background(), newDiscoveryDsInfo(svr.URL, svr.Client()), testOperationID, testTimeRange(), log.DefaultLogger)
+		require.NoError(t, err)
+		require.Equal(t, componentID("app-b"), got)
+		require.Equal(t, 2, d.unions, "the retry is routed through app-b")
+	})
+
+	t.Run("a skipped route component is named when the trace is not found", func(t *testing.T) {
+		d := &discoveryServer{
+			components:  []string{componentID("app-a"), componentID("app-b")},
+			routeStatus: map[string]int{"app-a": http.StatusNotFound},
+			hits:        map[string]int{},
+		}
+		svr := httptest.NewServer(d)
+		defer svr.Close()
+
+		_, err := discoverExemplarComponent(context.Background(), newDiscoveryDsInfo(svr.URL, svr.Client()), testOperationID, testTimeRange(), log.DefaultLogger)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "in 1 Application Insights components")
+		require.Contains(t, err.Error(), "skipped 1: app-a (subscription sub-a)")
+	})
+
+	t.Run("repeated rejections stop at the query budget", func(t *testing.T) {
+		var ids []string
+		for i := 0; i < 150; i++ {
+			ids = append(ids, componentID(fmt.Sprintf("app-%03d", i)))
+		}
+		d := &discoveryServer{
+			components:  ids,
+			unionStatus: http.StatusBadRequest,
+			hits:        map[string]int{},
+		}
+		svr := httptest.NewServer(d)
+		defer svr.Close()
+
+		_, err := discoverExemplarComponent(context.Background(), newDiscoveryDsInfo(svr.URL, svr.Client()), testOperationID, testTimeRange(), log.DefaultLogger)
+		require.ErrorContains(t, err, fmt.Sprintf("reached the limit of %d Log Analytics queries", exemplarMaxQueries))
+		sent := d.unions
+		for _, n := range d.hits {
+			sent += n
+		}
+		require.Equal(t, exemplarMaxQueries, sent)
+	})
+
+	t.Run("a missing or invalid operation ID is a downstream error", func(t *testing.T) {
+		d := &discoveryServer{components: []string{componentID("app-a")}, hits: map[string]int{}}
+		svr := httptest.NewServer(d)
+		defer svr.Close()
+		dsInfo := newDiscoveryDsInfo(svr.URL, svr.Client())
+
+		_, err := discoverExemplarComponent(context.Background(), dsInfo, "", testTimeRange(), log.DefaultLogger)
+		require.ErrorContains(t, err, "needs an operation ID")
+		require.True(t, backend.IsDownstreamError(err))
+
+		_, err = discoverExemplarComponent(context.Background(), dsInfo, "not-hex", testTimeRange(), log.DefaultLogger)
+		require.ErrorContains(t, err, "must be 1 to 64 hex characters")
+		require.True(t, backend.IsDownstreamError(err))
+		require.Zero(t, d.unions)
 	})
 
 	t.Run("a server error stops the lookup instead of retrying", func(t *testing.T) {
