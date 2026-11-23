@@ -1,5 +1,5 @@
 import { debounce } from 'lodash';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { t } from '@grafana/i18n';
 import { Icon, Input } from '@grafana/ui';
@@ -9,7 +9,15 @@ import { selectors } from '../../e2e/selectors';
 const Search = ({ searchFn }: { searchFn: (searchPhrase: string) => void }) => {
   const [searchFilter, setSearchFilter] = useState('');
 
-  const debouncedSearch = useMemo(() => debounce(searchFn, 600), [searchFn]);
+  const latestSearchFn = useRef(searchFn);
+  useEffect(() => {
+    latestSearchFn.current = searchFn;
+  }, [searchFn]);
+
+  const debouncedSearch = useMemo(
+    () => debounce((searchPhrase: string) => latestSearchFn.current(searchPhrase), 600),
+    []
+  );
   useEffect(() => {
     return () => {
       // Stop the invocation of the debounced function after unmounting

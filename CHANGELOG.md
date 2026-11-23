@@ -1,5 +1,6 @@
 ## Unreleased
 
+- Keep pending resource picker searches when the selection, filters, or loading state changes
 - Fix the resource picker discarding typed Advanced values and searches when the query editor updates
 
 ## 13.1.0
