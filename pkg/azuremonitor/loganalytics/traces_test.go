@@ -15,11 +15,11 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/kinds/dataquery"
+	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/types"
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/httpclient"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
-	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/kinds/dataquery"
-	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/types"
 )
 
 func TestBuildAppInsightsQuery(t *testing.T) {
@@ -1316,8 +1316,14 @@ func TestBuildAppInsightsQuery_ExemplarDiscovery(t *testing.T) {
 			subscriptionsHit = true
 			w.WriteHeader(http.StatusForbidden)
 		case strings.HasSuffix(path, "/providers/Microsoft.ResourceGraph/resources"):
-			_, _ = io.WriteString(w, fmt.Sprintf(`{"data":[{"id":%q,"subscriptionId":"sub"}]}`, componentResourceID))
+			_, _ = io.WriteString(w, fmt.Sprintf(`{"data":[{"id":%q,"subscriptionId":"sub","appId":"11111111-2222-4333-8444-555555555555"}]}`, componentResourceID))
 		case strings.HasSuffix(path, "/components/"+componentName+"/query"):
+			raw, _ := io.ReadAll(r.Body)
+			if strings.Contains(string(raw), "summarize rows") {
+				// Union queries return one _ResourceId row per component that holds the operation.
+				_, _ = io.WriteString(w, fmt.Sprintf(`{"tables":[{"name":"PrimaryResult","columns":[{"name":"_ResourceId","type":"string"},{"name":"rows","type":"long"}],"rows":[[%q,1]]}]}`, strings.ToLower(componentResourceID)))
+				return
+			}
 			_, _ = io.WriteString(w, `{"tables":[{"name":"PrimaryResult","columns":[],"rows":[["2026-11-18T19:45:00Z"]]}]}`)
 		case strings.Contains(strings.ToLower(path), "/providers/microsoft.insights/transactions/"):
 			correlationRes := AzureCorrelationAPIResponse{

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,7 +12,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
@@ -21,27 +21,49 @@ import (
 )
 
 const (
-	// exemplarComponentCap bounds how many readable components an exemplar lookup checks.
-	exemplarComponentCap = 25
+	// exemplarComponentCap bounds the total number of components one exemplar lookup checks.
+	// It is a safety bound, not a tuned value.
+	exemplarComponentCap = 500
+	// exemplarUnionPairLimit is the most (component, table) pairs one union query may span. Measured
+	// against the test tenant: 25 components x 4 tables and 14 x 7 succeed, 27 x 4 fails with
+	// BadArgumentError. A batch that is rejected with BadArgumentError is split in half.
+	exemplarUnionPairLimit = 100
+	// maxUnionAttempts bounds how often a union batch is retried after dropping components the
+	// caller cannot read.
+	maxUnionAttempts = 3
 	// argAPIVersion matches resourcegraph.ArgAPIVersion. It is repeated here because the
 	// resourcegraph package imports this package.
 	argAPIVersion = "2021-06-01-preview"
 	// argMaxPages bounds how many Resource Graph pages are read when listing components.
 	argMaxPages = 10
-	// componentsQuery lists Application Insights components. It has no subscription filter,
-	// so Resource Graph returns only resources the caller can read.
-	componentsQuery = "resources | where type =~ 'microsoft.insights/components' | project id, subscriptionId | order by id asc"
+	// componentsQuery lists Application Insights components with their app IDs. It has no
+	// subscription filter, so Resource Graph returns only resources the caller can read.
+	componentsQuery = "resources | where type =~ 'microsoft.insights/components' | project id, subscriptionId, appId = tostring(properties.AppId) | order by subscriptionId asc, id asc"
+	// insufficientAccessCode is the error code Log Analytics returns when a union names a
+	// resource the caller cannot read.
+	insufficientAccessCode = "InsufficientAccessToResource"
 )
+
+// exemplarUnionBatchSize is how many components one union query spans, derived from the pair limit.
+var exemplarUnionBatchSize = exemplarUnionPairLimit / len(unionTables)
+
+// unionTables are the Application Insights tables checked for an operation ID. They match the
+// tables in the per-component presence check.
+var unionTables = []string{"requests", "dependencies", "traces", "exceptions", "pageViews", "customEvents", "availabilityResults"}
+
+// appIDPattern limits app IDs to GUIDs before they are placed in KQL.
+var appIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 // appInsightsComponent is an Application Insights component the caller can read.
 type appInsightsComponent struct {
 	ID             string
 	SubscriptionID string
+	AppID          string
 }
 
 // listReadableAppInsightsComponents returns the Application Insights components the caller can
-// read, sorted by resource ID and capped at exemplarComponentCap. truncated reports whether more
-// components existed than the cap allows.
+// read, sorted by subscription and then resource ID, and capped at exemplarComponentCap.
+// truncated reports whether more components existed than the cap allows.
 func listReadableAppInsightsComponents(ctx context.Context, dsInfo types.DatasourceInfo) ([]appInsightsComponent, bool, error) {
 	svc, ok := dsInfo.Services["Azure Resource Graph"]
 	if !ok || svc.HTTPClient == nil {
@@ -93,6 +115,7 @@ func listReadableAppInsightsComponents(ctx context.Context, dsInfo types.Datasou
 			Data []struct {
 				ID             string `json:"id"`
 				SubscriptionID string `json:"subscriptionId"`
+				AppID          string `json:"appId"`
 			} `json:"data"`
 			SkipToken string `json:"$skipToken"`
 		}
@@ -103,7 +126,7 @@ func listReadableAppInsightsComponents(ctx context.Context, dsInfo types.Datasou
 			if row.ID == "" {
 				continue
 			}
-			out = append(out, appInsightsComponent{ID: row.ID, SubscriptionID: row.SubscriptionID})
+			out = append(out, appInsightsComponent{ID: row.ID, SubscriptionID: row.SubscriptionID, AppID: row.AppID})
 		}
 		if parsed.SkipToken == "" {
 			break
@@ -111,7 +134,12 @@ func listReadableAppInsightsComponents(ctx context.Context, dsInfo types.Datasou
 		skipToken = parsed.SkipToken
 	}
 
-	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].SubscriptionID != out[j].SubscriptionID {
+			return out[i].SubscriptionID < out[j].SubscriptionID
+		}
+		return out[i].ID < out[j].ID
+	})
 	truncated := len(out) > exemplarComponentCap
 	if truncated {
 		out = out[:exemplarComponentCap]
@@ -188,12 +216,275 @@ func componentHasOperation(ctx context.Context, dsInfo types.DatasourceInfo, com
 	return componentHasTrace, nil
 }
 
-// exemplarCheckParallelism bounds concurrent KQL checks per batch.
-const exemplarCheckParallelism = 4
+// buildUnionQuery returns one KQL query that checks every component's tables for operationID and
+// reports the matching rows per resource. Callers must pass components with valid app IDs.
+func buildUnionQuery(components []appInsightsComponent, operationID string) string {
+	parts := make([]string, 0, len(components)*len(unionTables))
+	for _, c := range components {
+		for _, table := range unionTables {
+			parts = append(parts, fmt.Sprintf("app('%s').%s", c.AppID, table))
+		}
+	}
+	return fmt.Sprintf("union %s | where operation_Id == '%s' | summarize rows = count() by _ResourceId",
+		strings.Join(parts, ", "), operationID)
+}
+
+// deniedAppIDs returns the app IDs named as InsufficientAccessToResource in a Log Analytics error.
+func deniedAppIDs(payload []byte) []string {
+	var body struct {
+		Error struct {
+			Details []struct {
+				Code  string `json:"code"`
+				Value string `json:"value"`
+			} `json:"details"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(payload, &body); err != nil {
+		return nil
+	}
+	var out []string
+	for _, d := range body.Error.Details {
+		if d.Code == insufficientAccessCode && d.Value != "" {
+			out = append(out, d.Value)
+		}
+	}
+	return out
+}
+
+// unionFailure is a union query that did not return usable results. status is the HTTP status, or
+// 0 when no usable response was received.
+type unionFailure struct {
+	status int
+	err    error
+}
+
+func (e *unionFailure) Error() string { return e.err.Error() }
+
+func (e *unionFailure) Unwrap() error { return e.err }
+
+// unionResult is the outcome of one union query. denied lists app IDs the caller cannot read.
+type unionResult struct {
+	matches []appInsightsComponent
+	denied  []string
+}
+
+// queryUnion runs buildUnionQuery against the route of the first component in the batch.
+func queryUnion(ctx context.Context, dsInfo types.DatasourceInfo, batch []appInsightsComponent, operationID string, timeRange backend.TimeRange) (unionResult, error) {
+	svc, ok := dsInfo.Services["Azure Log Analytics"]
+	if !ok || svc.HTTPClient == nil {
+		return unionResult{}, &unionFailure{err: fmt.Errorf("azure log analytics client is not configured")}
+	}
+	raw, err := json.Marshal(map[string]string{
+		"query":    buildUnionQuery(batch, operationID),
+		"timespan": timeRange.From.Format(time.RFC3339) + "/" + timeRange.To.Format(time.RFC3339),
+	})
+	if err != nil {
+		return unionResult{}, &unionFailure{err: err}
+	}
+	endpoint := strings.TrimRight(svc.URL, "/") + "/" + getApiURL(batch[0].ID, false, false)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(raw))
+	if err != nil {
+		return unionResult{}, &unionFailure{err: err}
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	res, err := svc.HTTPClient.Do(req)
+	if err != nil {
+		return unionResult{}, &unionFailure{err: fmt.Errorf("union presence check request failed: %w", err)}
+	}
+	defer func() { _ = res.Body.Close() }()
+	payload, err := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+	if err != nil {
+		return unionResult{}, &unionFailure{err: fmt.Errorf("union presence check response could not be read: %w", err)}
+	}
+	if res.StatusCode/100 != 2 {
+		if denied := deniedAppIDs(payload); len(denied) > 0 {
+			return unionResult{denied: denied}, nil
+		}
+		body := payload
+		if len(body) > 300 {
+			body = body[:300]
+		}
+		return unionResult{}, &unionFailure{
+			status: res.StatusCode,
+			err:    fmt.Errorf("union presence check returned %s: %s", res.Status, strings.TrimSpace(string(body))),
+		}
+	}
+
+	var parsed AzureLogAnalyticsResponse
+	if err := json.Unmarshal(payload, &parsed); err != nil {
+		return unionResult{}, &unionFailure{err: fmt.Errorf("union presence check response could not be decoded: %w", err)}
+	}
+	table, err := parsed.GetPrimaryResultTable()
+	if err != nil {
+		return unionResult{}, &unionFailure{err: err}
+	}
+	ridIndex := -1
+	for i, col := range table.Columns {
+		if col.Name == "_ResourceId" {
+			ridIndex = i
+		}
+	}
+	if ridIndex < 0 {
+		return unionResult{}, &unionFailure{err: fmt.Errorf("union presence check response has no _ResourceId column")}
+	}
+
+	// Log Analytics returns _ResourceId in lowercase, so match case-insensitively.
+	byID := make(map[string]appInsightsComponent, len(batch))
+	for _, c := range batch {
+		byID[strings.ToLower(c.ID)] = c
+	}
+	seen := make(map[string]bool)
+	var result unionResult
+	for _, row := range table.Rows {
+		if ridIndex >= len(row) {
+			continue
+		}
+		rid, ok := row[ridIndex].(string)
+		if !ok {
+			continue
+		}
+		c, ok := byID[strings.ToLower(rid)]
+		if !ok || seen[c.ID] {
+			continue
+		}
+		seen[c.ID] = true
+		result.matches = append(result.matches, c)
+	}
+	return result, nil
+}
+
+// checkUnionBatch returns the components in batch that hold operationID. Components without a valid
+// app ID are checked on their own. The rest are checked in union queries. An error means the lookup
+// cannot continue, for example because of throttling or a server failure.
+func checkUnionBatch(ctx context.Context, dsInfo types.DatasourceInfo, batch []appInsightsComponent, operationID string, timeRange backend.TimeRange, logger log.Logger, skipped map[string]string) ([]appInsightsComponent, error) {
+	var unionable, perComponent []appInsightsComponent
+	for _, c := range batch {
+		if appIDPattern.MatchString(c.AppID) {
+			unionable = append(unionable, c)
+		} else {
+			perComponent = append(perComponent, c)
+		}
+	}
+
+	var matches []appInsightsComponent
+	if len(perComponent) > 0 {
+		logger.Warn("exemplar component has no valid app ID, checking it on its own", "components", len(perComponent))
+		matches = append(matches, checkOneByOne(ctx, dsInfo, perComponent, operationID, timeRange, logger, skipped)...)
+	}
+	if len(unionable) == 0 {
+		return matches, nil
+	}
+	unionMatches, err := checkUnionGroup(ctx, dsInfo, unionable, operationID, timeRange, logger, skipped)
+	if err != nil {
+		return nil, err
+	}
+	return append(matches, unionMatches...), nil
+}
+
+// checkUnionGroup checks components in union queries. Components the caller cannot read are recorded
+// in skipped and the query is retried without them. A query rejected with BadArgumentError is split
+// in half. A single component that is still rejected is checked on its own. Any other failure is
+// returned, so the lookup stops instead of multiplying requests.
+func checkUnionGroup(ctx context.Context, dsInfo types.DatasourceInfo, batch []appInsightsComponent, operationID string, timeRange backend.TimeRange, logger log.Logger, skipped map[string]string) ([]appInsightsComponent, error) {
+	remaining := batch
+	for attempt := 0; attempt < maxUnionAttempts && len(remaining) > 0; attempt++ {
+		res, err := queryUnion(ctx, dsInfo, remaining, operationID, timeRange)
+		if err != nil {
+			var failure *unionFailure
+			if !errors.As(err, &failure) || failure.status != http.StatusBadRequest {
+				return nil, err
+			}
+			if len(remaining) == 1 {
+				logger.Warn("exemplar union rejected for one component, checking it on its own", "component", remaining[0].ID, "err", err)
+				return checkOneByOne(ctx, dsInfo, remaining, operationID, timeRange, logger, skipped), nil
+			}
+			logger.Warn("exemplar union rejected, splitting batch", "components", len(remaining), "err", err)
+			mid := len(remaining) / 2
+			first, err := checkUnionGroup(ctx, dsInfo, remaining[:mid], operationID, timeRange, logger, skipped)
+			if err != nil {
+				return nil, err
+			}
+			second, err := checkUnionGroup(ctx, dsInfo, remaining[mid:], operationID, timeRange, logger, skipped)
+			if err != nil {
+				return nil, err
+			}
+			return append(first, second...), nil
+		}
+		if len(res.denied) == 0 {
+			return res.matches, nil
+		}
+
+		denied := make(map[string]bool, len(res.denied))
+		for _, id := range res.denied {
+			denied[strings.ToLower(id)] = true
+		}
+		var kept []appInsightsComponent
+		for _, c := range remaining {
+			if denied[strings.ToLower(c.AppID)] {
+				skipped[c.ID] = "not readable by this identity"
+				logger.Warn("exemplar component skipped, not readable", "component", c.ID)
+				continue
+			}
+			kept = append(kept, c)
+		}
+		if len(kept) == len(remaining) {
+			// The denied IDs matched nothing in this batch, so retrying would repeat the same request.
+			return checkOneByOne(ctx, dsInfo, remaining, operationID, timeRange, logger, skipped), nil
+		}
+		remaining = kept
+	}
+	if len(remaining) == 0 {
+		return nil, nil
+	}
+	return checkOneByOne(ctx, dsInfo, remaining, operationID, timeRange, logger, skipped), nil
+}
+
+// checkOneByOne checks each component with its own presence query. It is used for components that
+// cannot go in a union. Components that fail are recorded in skipped.
+func checkOneByOne(ctx context.Context, dsInfo types.DatasourceInfo, components []appInsightsComponent, operationID string, timeRange backend.TimeRange, logger log.Logger, skipped map[string]string) []appInsightsComponent {
+	var matches []appInsightsComponent
+	for _, c := range components {
+		status, err := componentHasOperation(ctx, dsInfo, c.ID, operationID, timeRange)
+		if err != nil {
+			logger.Warn("exemplar component check failed", "component", c.ID, "err", err)
+			skipped[c.ID] = err.Error()
+			continue
+		}
+		if status == componentHasTrace {
+			matches = append(matches, c)
+		}
+	}
+	return matches
+}
+
+// chunkComponents splits components into consecutive batches of at most size.
+func chunkComponents(components []appInsightsComponent, size int) [][]appInsightsComponent {
+	var out [][]appInsightsComponent
+	for start := 0; start < len(components); start += size {
+		end := start + size
+		if end > len(components) {
+			end = len(components)
+		}
+		out = append(out, components[start:end])
+	}
+	return out
+}
+
+// skippedList formats skipped components as "name (subscription id)" in sorted order.
+func skippedList(skipped map[string]string, subscriptionByID map[string]string) string {
+	names := make([]string, 0, len(skipped))
+	for id := range skipped {
+		names = append(names, fmt.Sprintf("%s (subscription %s)", path.Base(id), subscriptionByID[id]))
+	}
+	sort.Strings(names)
+	return strings.Join(names, ", ")
+}
 
 // discoverExemplarComponent returns the resource ID of the readable Application Insights component
-// that holds operationID. Components are checked in batches of exemplarCheckParallelism, ordered by
-// resource ID. If several components in one batch have the trace, the lowest ID wins.
+// that holds operationID. Components are checked in union batches, ordered by subscription and then
+// resource ID. Batches run one at a time, so the lookup sends one Log Analytics query at a time.
+// The lookup stops at the first batch that has the trace.
 func discoverExemplarComponent(ctx context.Context, dsInfo types.DatasourceInfo, operationID string, timeRange backend.TimeRange, logger log.Logger) (string, error) {
 	if !operationIDPattern.MatchString(operationID) {
 		return "", fmt.Errorf("invalid operation id for trace exemplar lookup")
@@ -207,43 +498,28 @@ func discoverExemplarComponent(ctx context.Context, dsInfo types.DatasourceInfo,
 		return "", backend.DownstreamError(fmt.Errorf("no readable Application Insights components"))
 	}
 
-	var checked []string
-	var skipped []string
-	for start := 0; start < len(components); start += exemplarCheckParallelism {
-		end := start + exemplarCheckParallelism
-		if end > len(components) {
-			end = len(components)
+	subscriptionByID := make(map[string]string, len(components))
+	for _, c := range components {
+		subscriptionByID[c.ID] = c.SubscriptionID
+	}
+	skipped := make(map[string]string)
+	checked := 0
+	batches := chunkComponents(components, exemplarUnionBatchSize)
+	for _, batch := range batches {
+		batchSkipped := make(map[string]string)
+		matches, err := checkUnionBatch(ctx, dsInfo, batch, operationID, timeRange, logger, batchSkipped)
+		if err != nil {
+			return "", backend.DownstreamError(fmt.Errorf("trace exemplar lookup stopped: %w", err))
 		}
-		batch := components[start:end]
-		results := make([]componentCheck, len(batch))
-
-		var wg sync.WaitGroup
-		for i, component := range batch {
-			wg.Add(1)
-			go func(i int, component appInsightsComponent) {
-				defer wg.Done()
-				status, checkErr := componentHasOperation(ctx, dsInfo, component.ID, operationID, timeRange)
-				if checkErr != nil {
-					logger.Warn("exemplar component check failed", "component", component.ID, "err", checkErr)
-					results[i] = componentSkipped
-					return
-				}
-				results[i] = status
-			}(i, component)
+		for id, reason := range batchSkipped {
+			skipped[id] = reason
 		}
-		wg.Wait()
-
+		checked += len(batch) - len(batchSkipped)
+		// If several components in the batch have the trace, the lowest ID wins.
 		var match string
-		for i, status := range results {
-			name := path.Base(batch[i].ID)
-			checked = append(checked, name)
-			switch status {
-			case componentHasTrace:
-				if match == "" || batch[i].ID < match {
-					match = batch[i].ID
-				}
-			case componentSkipped:
-				skipped = append(skipped, fmt.Sprintf("%s (subscription %s)", name, batch[i].SubscriptionID))
+		for _, c := range matches {
+			if match == "" || c.ID < match {
+				match = c.ID
 			}
 		}
 		if match != "" {
@@ -251,16 +527,17 @@ func discoverExemplarComponent(ctx context.Context, dsInfo types.DatasourceInfo,
 		}
 	}
 
-	msg := fmt.Sprintf(
-		"trace %s was not found in %d Application Insights components this identity can read (checked: %s; skipped %d",
-		operationID, len(checked), strings.Join(checked, ", "), len(skipped),
-	)
+	if checked == 0 {
+		// Every component failed, so nothing was searched. Do not report this as "not found".
+		return "", backend.DownstreamError(fmt.Errorf("could not check any of %d Application Insights components for trace %s: %s",
+			len(components), operationID, skippedList(skipped, subscriptionByID)))
+	}
+	msg := fmt.Sprintf("trace %s was not found in %d Application Insights components this identity can read", operationID, checked)
 	if len(skipped) > 0 {
-		msg += ": " + strings.Join(skipped, ", ")
+		msg += fmt.Sprintf(" (skipped %d: %s)", len(skipped), skippedList(skipped, subscriptionByID))
 	}
-	msg += ")"
 	if truncated {
-		msg += fmt.Sprintf("; only the first %d components ordered by resource id were checked", exemplarComponentCap)
+		msg += fmt.Sprintf("; only the first %d components ordered by subscription and resource id were checked", exemplarComponentCap)
 	}
-	return "", backend.DownstreamError(fmt.Errorf("%s", msg))
+	return "", backend.DownstreamError(errors.New(msg))
 }
