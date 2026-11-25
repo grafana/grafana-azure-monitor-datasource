@@ -18,15 +18,15 @@ func TestNotFoundCache(t *testing.T) {
 
 	t.Run("holds a missing-resource error until the TTL ends", func(t *testing.T) {
 		var c NotFoundCache
-		c.Hold("a", http.StatusNotFound, notFound)
+		c.Hold(nil, "a", http.StatusNotFound, notFound)
 
 		now = now.Add(notFoundTTL - time.Second)
-		require.ErrorIs(t, c.Get("a"), notFound)
-		require.ErrorContains(t, c.Get("a"), "sends no request to Azure")
-		require.NoError(t, c.Get("b"))
+		require.ErrorIs(t, c.Get(nil, "a"), notFound)
+		require.ErrorContains(t, c.Get(nil, "a"), "sends no request to Azure")
+		require.NoError(t, c.Get(nil, "b"))
 
 		now = now.Add(time.Second)
-		require.NoError(t, c.Get("a"))
+		require.NoError(t, c.Get(nil, "a"))
 	})
 
 	tests := map[string]struct {
@@ -40,8 +40,8 @@ func TestNotFoundCache(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name+" is not held", func(t *testing.T) {
 			var c NotFoundCache
-			c.Hold("a", tt.status, tt.err)
-			require.NoError(t, c.Get("a"))
+			c.Hold(nil, "a", tt.status, tt.err)
+			require.NoError(t, c.Get(nil, "a"))
 		})
 	}
 }

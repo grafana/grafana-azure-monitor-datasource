@@ -532,11 +532,8 @@ func (e *AzureMonitorDatasource) fetchSubscriptionDisplayName(cli *http.Client, 
 }
 
 func (e *AzureMonitorDatasource) executeQuery(ctx context.Context, query *types.AzureMonitorQuery, dsInfo types.DatasourceInfo, cli *http.Client, url string) (*backend.DataResponse, error) {
-	holdNotFound := !utils.IsUserScopedAuth(dsInfo.Credentials)
-	if holdNotFound {
-		if err := e.notFound.Get(query.URL); err != nil {
-			return nil, err
-		}
+	if err := e.notFound.Get(dsInfo.Credentials, query.URL); err != nil {
+		return nil, err
 	}
 
 	req, err := e.createRequest(ctx, url)
@@ -574,9 +571,7 @@ func (e *AzureMonitorDatasource) executeQuery(ctx context.Context, query *types.
 
 	data, err := e.unmarshalResponse(res)
 	if err != nil {
-		if holdNotFound {
-			e.notFound.Hold(query.URL, res.StatusCode, err)
-		}
+		e.notFound.Hold(dsInfo.Credentials, query.URL, res.StatusCode, err)
 		return nil, err
 	}
 
