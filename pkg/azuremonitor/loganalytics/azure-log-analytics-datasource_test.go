@@ -1333,3 +1333,36 @@ func TestGetCorrelationWorkspaces_FollowsNextLink(t *testing.T) {
 	_, ok := got["/subscriptions/sub/resourcegroups/rg/providers/microsoft.insights/components/r2"]
 	require.True(t, ok, "second page resource missing: %#v", got)
 }
+
+func TestRebaseNextLink(t *testing.T) {
+	const next = "https://management.azure.com/subscriptions/sub/providers/microsoft.insights/transactions/op?api-version=2019-10-17-preview&$skipToken=abc"
+
+	tests := []struct {
+		name       string
+		serviceURL string
+		want       string
+	}{
+		{
+			name:       "service URL without a path",
+			serviceURL: "https://management.azure.com",
+			want:       "https://management.azure.com/subscriptions/sub/providers/microsoft.insights/transactions/op?api-version=2019-10-17-preview&$skipToken=abc",
+		},
+		{
+			name:       "service URL with a path keeps it",
+			serviceURL: "https://proxy.example.com/azuremonitor",
+			want:       "https://proxy.example.com/azuremonitor/subscriptions/sub/providers/microsoft.insights/transactions/op?api-version=2019-10-17-preview&$skipToken=abc",
+		},
+		{
+			name:       "service URL with a trailing slash does not double it",
+			serviceURL: "https://proxy.example.com/azuremonitor/",
+			want:       "https://proxy.example.com/azuremonitor/subscriptions/sub/providers/microsoft.insights/transactions/op?api-version=2019-10-17-preview&$skipToken=abc",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := rebaseNextLink(tt.serviceURL, next)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}

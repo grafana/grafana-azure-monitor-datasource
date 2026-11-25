@@ -929,8 +929,10 @@ func rebaseNextLink(serviceURL, nextLink string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("invalid Azure Monitor URL: %w", err)
 	}
-	base.Path = parsed.Path
-	base.RawPath = parsed.RawPath
+	// Append the nextLink path to any path the configured URL already has, the same way the
+	// first correlation URL is built, so a prefix on the service URL is kept.
+	base.Path = strings.TrimSuffix(base.Path, "/") + parsed.Path
+	base.RawPath = ""
 	base.RawQuery = parsed.RawQuery
 	return base.String(), nil
 }
