@@ -22,6 +22,15 @@ describe('AdvancedResourcePicker', () => {
     expect(onChange).toHaveBeenCalledWith([{}]);
   });
 
+  it('should keep a subscription typed before the parent passes back the empty resource', async () => {
+    const onChange = jest.fn();
+    render(<AdvancedResourcePicker onChange={onChange} resources={[]} />);
+
+    await userEvent.type(await screen.findByLabelText('Subscription'), 'd');
+
+    expect(onChange).toHaveBeenLastCalledWith([{ subscription: 'd' }]);
+  });
+
   it('should add a resource', async () => {
     const onChange = jest.fn();
     render(<AdvancedResourcePicker onChange={onChange} resources={[{ subscription: 'def-123' }]} />);

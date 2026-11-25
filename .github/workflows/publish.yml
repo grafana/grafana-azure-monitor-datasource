@@ -33,8 +33,6 @@ permissions: {}
 jobs:
   cd:
     name: CD
-    # Temporarily disabled Sept 22 2026
-    if: false
     uses: grafana/plugin-ci-workflows/.github/workflows/cd.yml@ci-cd-workflows/v10.1.0
     permissions:
       contents: write
@@ -42,6 +40,7 @@ jobs:
       attestations: write
       pull-requests: read
     with:
+      golangci-lint-version: '2.15.0'
       branch: ${{ github.event.inputs.branch }}
       # prod targets all environments by default; ops does not target dev by default
       environment: ${{ github.event.inputs.environment == 'ops' && 'dev,ops' || github.event.inputs.environment }}

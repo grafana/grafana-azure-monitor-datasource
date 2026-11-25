@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -20,14 +21,14 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/grafana/grafana-plugin-sdk-go/backend"
-	"github.com/grafana/grafana-plugin-sdk-go/backend/tracing"
-	"github.com/grafana/grafana-plugin-sdk-go/config"
-	"github.com/grafana/grafana-plugin-sdk-go/data"
 	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/kinds/dataquery"
 	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/macros"
 	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/types"
 	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/utils"
+	"github.com/grafana/grafana-plugin-sdk-go/backend"
+	"github.com/grafana/grafana-plugin-sdk-go/backend/tracing"
+	"github.com/grafana/grafana-plugin-sdk-go/config"
+	"github.com/grafana/grafana-plugin-sdk-go/data"
 )
 
 // Returns tables with the `HasData` field set to true
@@ -442,6 +443,9 @@ func (e *AzureLogAnalyticsDatasource) buildQuery(ctx context.Context, query back
 	return azureLogAnalyticsQuery, nil
 }
 
+// wideFrameCellLimit keeps a wide frame plus its Arrow encode under about 1.3 GiB of heap.
+var wideFrameCellLimit int64 = 25_000_000
+
 func (e *AzureLogAnalyticsDatasource) executeQuery(ctx context.Context, query *AzureLogAnalyticsQuery, dsInfo types.DatasourceInfo, client *http.Client, url string) (*backend.DataResponse, error) {
 	// If azureLogAnalyticsSameAs is defined and set to false, return an error
 	if sameAs, ok := dsInfo.JSONData["azureLogAnalyticsSameAs"]; ok {
@@ -558,10 +562,14 @@ func (e *AzureLogAnalyticsDatasource) executeQuery(ctx context.Context, query *A
 	case dataquery.ResultFormatTimeSeries:
 		tsSchema := frame.TimeSeriesSchema()
 		if tsSchema.Type == data.TimeSeriesTypeLong {
-			wideFrame, err := data.LongToWide(frame, nil)
+			wideFrame, err := data.LongToWideWithLimit(frame, nil, wideFrameCellLimit)
 			if err == nil {
 				frame = wideFrame
 			} else {
+				if errors.Is(err, data.ErrorWideFrameTooLarge) {
+					e.Logger.Warn("time series result exceeds the wide frame cell limit, returning the long table",
+						"rows", frame.Rows(), "fields", len(frame.Fields), "err", err)
+				}
 				frame.AppendNotices(data.Notice{
 					Severity: data.NoticeSeverityWarning,
 					Text:     "could not convert frame to time series, returning raw table: " + err.Error(),
@@ -812,23 +820,32 @@ func getTracesQueryUrl(azurePortalUrl string) (string, error) {
 }
 
 func getCorrelationWorkspaces(ctx context.Context, baseResource string, resourcesMap map[string]bool, dsInfo types.DatasourceInfo, operationId string) (map[string]bool, error) {
-	azMonService := dsInfo.Services["Azure Monitor"]
-	correlationUrl := azMonService.URL + fmt.Sprintf("%s/providers/microsoft.insights/transactions/%s", baseResource, operationId)
+	if err := validateAzureResourcePath(baseResource); err != nil {
+		return nil, err
+	}
+	if err := validateTraceOperationID(operationId); err != nil {
+		return nil, err
+	}
 
-	callCorrelationAPI := func(target string, extraQuery url.Values) (AzureCorrelationAPIResponse, error) {
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewBuffer([]byte{}))
+	azMonService := dsInfo.Services["Azure Monitor"]
+	baseURL, err := url.Parse(azMonService.URL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid Azure Monitor URL: %w", err)
+	}
+	if baseURL.Host == "" {
+		return nil, fmt.Errorf("invalid Azure Monitor URL: missing host")
+	}
+	correlationUrl := baseURL.JoinPath(baseResource, "providers", "microsoft.insights", "transactions", operationId).String()
+
+	callCorrelationAPI := func(requestURL string) (AzureCorrelationAPIResponse, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 		if err != nil {
 			return AzureCorrelationAPIResponse{}, fmt.Errorf("%v: %w", "failed to create request", err)
 		}
-		req.URL.Path = target
 		req.Header.Set("Content-Type", "application/json")
 		values := req.URL.Query()
-		for key, vals := range extraQuery {
-			values[key] = vals
-		}
 		values.Set("api-version", "2019-10-17-preview")
 		req.URL.RawQuery = values.Encode()
-		req.Method = "GET"
 
 		_, span := tracing.DefaultTracer().Start(ctx, "azure traces correlation request", trace.WithAttributes(
 			attribute.String("target", req.URL.String()),
@@ -875,18 +892,21 @@ func getCorrelationWorkspaces(ctx context.Context, baseResource string, resource
 		return data, nil
 	}
 
-	correlationResponse, err := callCorrelationAPI(correlationUrl, nil)
+	var nextLink *string
+	var correlationResponse AzureCorrelationAPIResponse
+
+	correlationResponse, err = callCorrelationAPI(correlationUrl)
 	if err != nil {
 		return nil, err
 	}
-	nextLink := correlationResponse.Properties.NextLink
+	nextLink = correlationResponse.Properties.NextLink
 
 	for nextLink != nil && *nextLink != "" {
-		target, query, err := rebaseNextLink(azMonService.URL, *nextLink)
+		target, err := rebaseNextLink(azMonService.URL, *nextLink)
 		if err != nil {
 			return nil, err
 		}
-		correlationResponse, err = callCorrelationAPI(target, query)
+		correlationResponse, err = callCorrelationAPI(target)
 		if err != nil {
 			return nil, err
 		}
@@ -900,12 +920,19 @@ func getCorrelationWorkspaces(ctx context.Context, baseResource string, resource
 
 // rebaseNextLink keeps the path and query of an ARM nextLink and places them on the
 // Azure Monitor service URL, so the request goes through the same data source client.
-func rebaseNextLink(serviceURL, nextLink string) (string, url.Values, error) {
+func rebaseNextLink(serviceURL, nextLink string) (string, error) {
 	parsed, err := url.Parse(nextLink)
 	if err != nil {
-		return "", nil, fmt.Errorf("invalid correlation nextLink: %w", err)
+		return "", fmt.Errorf("invalid correlation nextLink: %w", err)
 	}
-	return serviceURL + parsed.Path, parsed.Query(), nil
+	base, err := url.Parse(serviceURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid Azure Monitor URL: %w", err)
+	}
+	base.Path = parsed.Path
+	base.RawPath = parsed.RawPath
+	base.RawQuery = parsed.RawQuery
+	return base.String(), nil
 }
 
 // GetPrimaryResultTable returns the first table in the response named "PrimaryResult", or an

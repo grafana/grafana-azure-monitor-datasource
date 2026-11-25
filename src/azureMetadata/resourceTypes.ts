@@ -1,3 +1,5 @@
+import multiResourceCompatibleTypeList from './multiResourceCompatibleTypes.json';
+
 /**
 This list is obtained parsing https://docs.microsoft.com/en-us/azure/governance/resource-graph/reference/supported-tables-resources
 To programatically get the list, execute in the browser console:
@@ -27,6 +29,7 @@ export const resourceTypeDisplayNames: { [k: string]: string } = {
   'microsoft.analysisservices/servers': 'Analysis Services',
   'microsoft.anybuild/clusters': 'AnyBuild clusters',
   'microsoft.apimanagement/service': 'API Management services',
+  'microsoft.app/sessionpools': 'Container Apps session pools',
   'microsoft.appconfiguration/configurationstores': 'App Configuration',
   'microsoft.appplatform/spring': 'Azure Spring Cloud',
   'microsoft.attestation/attestationproviders': 'Attestation providers',
@@ -45,6 +48,7 @@ export const resourceTypeDisplayNames: { [k: string]: string } = {
   'microsoft.azurepercept/accounts': 'Azure Percept accounts',
   'microsoft.azurestack/registrations': 'Azure Stack Hubs',
   'microsoft.azurestackhci/clusters': 'Azure Stack HCI',
+  'microsoft.azurestackhci/edgemachines': 'Azure Stack HCI edge machines',
   'microsoft.azurestackhci/virtualmachines': 'Azure Stack HCI virtual machine - Azure Arc',
   'microsoft.baremetal/crayservers': 'Cray Servers',
   'microsoft.baremetal/monitoringservers': 'Monitoring Servers',
@@ -149,6 +153,7 @@ export const resourceTypeDisplayNames: { [k: string]: string } = {
   'microsoft.documentdb/cassandraclusters': 'Azure Managed Instance for Apache Cassandra',
   'microsoft.documentdb/databaseaccounts': 'Azure Cosmos DB accounts',
   'microsoft.domainregistration/domains': 'App Service Domains',
+  'microsoft.durabletask/schedulers': 'Durable Task schedulers',
   'microsoft.edgeorder/addresses': 'Azure Edge Hardware Center Address',
   'microsoft.edgeorder/orderitems': 'Azure Edge Hardware Center',
   'microsoft.elastic/monitors': 'Elasticsearch (Elastic Cloud)',
@@ -180,6 +185,7 @@ export const resourceTypeDisplayNames: { [k: string]: string } = {
   'microsoft.healthcareapis/workspaces/dicomservices': 'DICOM services',
   'microsoft.healthcareapis/workspaces/fhirservices': 'FHIR services',
   'microsoft.healthcareapis/workspaces/iotconnectors': 'IoT connectors',
+  'microsoft.horizondb/clusters': 'Azure HorizonDB clusters',
   'microsoft.hpcworkbench/instances': 'HPC Workbenches (preview)',
   'microsoft.hpcworkbench/instances/chambers': 'Chambers (preview)',
   'microsoft.hpcworkbench/instances/chambers/accessprofiles': 'Chamber Profiles (preview)',
@@ -205,6 +211,7 @@ export const resourceTypeDisplayNames: { [k: string]: string } = {
   'microsoft.intelligentitdigitaltwin/digitaltwins/testplans': 'Suites',
   'microsoft.intelligentitdigitaltwin/digitaltwins/tests': 'Scripts',
   'microsoft.iotcentral/iotapps': 'IoT Central Applications',
+  'microsoft.iotfirmwaredefense/workspaces': 'IoT firmware analysis workspaces',
   'microsoft.keyvault/vaults': 'Key vaults',
   'microsoft.kubernetes/connectedclusters': 'Kubernetes - Azure Arc',
   'microsoft.kusto/clusters': 'Azure Data Explorer Clusters',
@@ -228,6 +235,8 @@ export const resourceTypeDisplayNames: { [k: string]: string } = {
   'microsoft.machinelearningservices/workspaces/onlineendpoints/deployments': 'Machine learning online deployments',
   'microsoft.maintenance/maintenanceconfigurations': 'Maintenance Configurations',
   'microsoft.managedidentity/userassignedidentities': 'Managed Identities',
+  'microsoft.managednetworkfabric/networkfabriccontrollers': 'Network fabric controllers',
+  'microsoft.managednetworkfabric/networkfabrics': 'Network fabrics',
   'microsoft.maps/accounts': 'Azure Maps Accounts',
   'microsoft.maps/accounts/creators': 'Azure Maps Creator Resources',
   'microsoft.marketplaceapps/classicdevservices': 'Classic Dev Services',
@@ -251,6 +260,7 @@ export const resourceTypeDisplayNames: { [k: string]: string } = {
   'microsoft.mobilenetwork/packetcorecontrolplanes/packetcoredataplanes': 'Packet Core Data Planes',
   'microsoft.mobilenetwork/packetcorecontrolplanes/packetcoredataplanes/attacheddatanetworks': 'Attached Data Networks',
   'microsoft.mobilenetwork/sims': 'Sims',
+  'microsoft.monitor/pipelinegroups': 'Azure Monitor pipeline groups',
   'microsoft.netapp/netappaccounts': 'NetApp accounts',
   'microsoft.netapp/netappaccounts/capacitypools': 'Capacity pools',
   'microsoft.netapp/netappaccounts/capacitypools/volumes': 'Volumes',
@@ -280,6 +290,7 @@ export const resourceTypeDisplayNames: { [k: string]: string } = {
   'microsoft.network/networkinterfaces': 'Network interfaces',
   'microsoft.network/networkmanagers': 'Network Managers',
   'microsoft.network/networksecuritygroups': 'Network security groups',
+  'microsoft.network/networksecurityperimeters': 'Network security perimeters',
   'microsoft.network/networkwatchers': 'Network Watchers',
   'microsoft.network/networkwatchers/connectionmonitors': 'Connection Monitors',
   'microsoft.network/networkwatchers/flowlogs': 'NSG Flow Logs',
@@ -314,6 +325,7 @@ export const resourceTypeDisplayNames: { [k: string]: string } = {
   'microsoft.portal/dashboards': 'Shared dashboards',
   'microsoft.powerbidedicated/capacities': 'Power BI Embedded',
   'microsoft.purview/accounts': 'Purview accounts',
+  'microsoft.quantum/provideraccounts': 'Azure Quantum provider accounts',
   'microsoft.quantum/workspaces': 'Quantum Workspaces',
   'microsoft.recommendationsservice/accounts': 'Intelligent Recommendations Accounts',
   'microsoft.recommendationsservice/accounts/modeling': 'Modeling',
@@ -402,6 +414,7 @@ export const resourceTypeDisplayNames: { [k: string]: string } = {
   'microsoft.workloads/sapvirtualinstances/centralinstances': 'SAP central server instances',
   'microsoft.workloads/sapvirtualinstances/databaseinstances': 'SAP database server instances',
   'nginx.nginxplus/nginxdeployments': 'NGINX Deployment',
+  'oracle.database/goldengatedeployments': 'Oracle GoldenGate deployments',
   'paraleap.cloudmonix/services': 'CloudMonix',
   'pokitdok.platform/services': 'PokitDok Platform',
   'providers.test/statefulibizaengines': 'My Resources',
@@ -427,27 +440,11 @@ export const resourceTypeDisplayNames: { [k: string]: string } = {
 // This list has been manually written using the Azure Portal as the source.
 // Visit https://portal.azure.com/#view/Microsoft_Azure_Monitoring/AzureMonitoringBrowseBlade/~/metrics
 // and go to Select a scope > Resource types > Multi-resource compatible (preview)
-export const multiResourceCompatibleTypes: { [ns: string]: boolean } = {
-  'microsoft.cache/redis': true, // 'Azure Cache for Redis'
-  'microsoft.documentdb/mongoclusters': true, // 'Azure Cosmos DB for MongoDB'
-  'microsoft.dbforpostgresql/flexibleservers': true, // 'Azure Database for PostgreSQL flexible servers'
-  'microsoft.storagecache/amlfilesystems': true, // 'Lustre File Systems'
-  'microsoft.monitor/accounts': true, // Azure Monitor Workspaces
-  'microsoft.databoxedge/databoxedgedevices': true, // 'Azure Stack Edge / Data Box Gateway'
-  'microsoft.azurestackhci/clusters': true, // 'Azure Stack HCI'
-  'microsoft.dataprotection/backupvaults': true, // 'Backup vaults'
-  'microsoft.networkcloud/baremetalmachines': true, // 'Bare Metal Machines'
-  'microsoft.netapp/netappaccounts/capacitypools': true, // 'Capacity pools'
-  'microsoft.netapp/netappaccounts/capacitypools/volumes': true, // 'Capacity pool volumes'
-  'microsoft.network/networkwatchers/connectionmonitors': true, // 'Connection Monitors'
-  'microsoft.keyvault/vaults': true, // 'Key vaults'
-  'microsoft.recoveryservices/vaults': true, // 'Recovery Services vaults'
-  'microsoft.sql/servers/databases': true, // 'SQL databases'
-  'microsoft.sql/servers/elasticpools': true, // 'SQL elastic pools'
-  'microsoft.compute/virtualmachinescalesets': true, // 'Virtual machine scale sets'
-  'microsoft.compute/virtualmachines': true, // 'Virtual machines'
-  'microsoft.signalrservice/webpubsub': true, // 'Web PubSub Service'
-};
+// The list lives in multiResourceCompatibleTypes.json so the backend can check its copy
+// against it (TestMultiResourceCompatibleTypesMatchFrontend in pkg/azuremonitor/metrics).
+export const multiResourceCompatibleTypes: { [ns: string]: boolean } = Object.fromEntries(
+  multiResourceCompatibleTypeList.map((ns) => [ns, true])
+);
 
 export const resourceTypes = [
   'microsoft.aad/domainservices',
@@ -457,12 +454,14 @@ export const resourceTypes = [
   'microsoft.app/containerapps',
   'microsoft.app/jobs',
   'microsoft.app/managedenvironments',
+  'microsoft.app/sessionpools',
   'microsoft.appconfiguration/configurationstores',
   'microsoft.appplatform/spring',
   'microsoft.automation/automationaccounts',
   'microsoft.avs/privateclouds',
   'microsoft.azuresphere/catalogs',
   'microsoft.azurestackhci/clusters',
+  'microsoft.azurestackhci/edgemachines',
   'microsoft.azurestackresourcemonitor/storageaccountmonitor',
   'microsoft.batch/batchaccounts',
   'microsoft.batchai/workspaces',
@@ -533,6 +532,7 @@ export const resourceTypes = [
   'microsoft.documentdb/cassandraclusters',
   'microsoft.documentdb/databaseaccounts',
   'microsoft.documentdb/mongoclusters',
+  'microsoft.durabletask/schedulers',
   'microsoft.edgezones/edgezones',
   'microsoft.elasticsan/elasticsans',
   'microsoft.enterpriseknowledgegraph/services',
@@ -553,6 +553,7 @@ export const resourceTypes = [
   'microsoft.healthcareapis/workspaces/fhirservices',
   'microsoft.healthcareapis/workspaces/iotconnectors',
   'microsoft.healthmodel/healthmodels',
+  'microsoft.horizondb/clusters',
   'microsoft.hybridcontainerservice/provisionedclusters',
   'microsoft.hybridnetwork/networkfunctions',
   'microsoft.hybridnetwork/virtualnetworkfunctions',
@@ -560,6 +561,7 @@ export const resourceTypes = [
   'microsoft.insights/components',
   'microsoft.insights/datacollectionrules',
   'microsoft.iotcentral/iotapps',
+  'microsoft.iotfirmwaredefense/workspaces',
   'microsoft.iotspaces/graph',
   'microsoft.keyvault/managedhsms',
   'microsoft.keyvault/vaults',
@@ -575,6 +577,8 @@ export const resourceTypes = [
   'microsoft.managednetworkfabric/l2isolationdomains',
   'microsoft.managednetworkfabric/l3isolationdomains',
   'microsoft.managednetworkfabric/networkdevices',
+  'microsoft.managednetworkfabric/networkfabriccontrollers',
+  'microsoft.managednetworkfabric/networkfabrics',
   'microsoft.maps/accounts',
   'microsoft.media/mediaservices',
   'microsoft.media/mediaservices/liveevents',
@@ -588,6 +592,7 @@ export const resourceTypes = [
   'microsoft.mobilenetwork/packetcorecontrolplanes/packetcoredataplanes',
   'microsoft.mobilenetwork/radioaccessnetworks',
   'microsoft.monitor/accounts',
+  'microsoft.monitor/pipelinegroups',
   'microsoft.netapp/netappaccounts/capacitypools',
   'microsoft.netapp/netappaccounts/capacitypools/volumes',
   'microsoft.network/applicationgateways',
@@ -607,6 +612,7 @@ export const resourceTypes = [
   'microsoft.network/natgateways',
   'microsoft.network/networkinterfaces',
   'microsoft.network/networkmanagers/ipampools',
+  'microsoft.network/networksecurityperimeters',
   'microsoft.network/networkvirtualappliances',
   'microsoft.network/networkwatchers',
   'microsoft.network/networkwatchers/connectionmonitors',
@@ -629,6 +635,7 @@ export const resourceTypes = [
   'microsoft.networkcloud/storageappliances',
   'microsoft.networkfunction/azuretrafficcollectors',
   'microsoft.notificationhubs/namespaces/notificationhubs',
+  'microsoft.openenergyplatform/energyservices',
   'microsoft.operationalinsights/workspaces',
   'microsoft.operationsmanagement/solutions',
   'microsoft.orbital/contactprofiles',
@@ -641,6 +648,7 @@ export const resourceTypes = [
   'microsoft.powerbidedicated/capacities',
   'microsoft.providerhub/providermonitorsettings',
   'microsoft.purview/accounts',
+  'microsoft.quantum/provideraccounts',
   'microsoft.recoveryservices/vaults',
   'microsoft.relay/namespaces',
   'microsoft.resources/subscriptions',
@@ -695,6 +703,7 @@ export const resourceTypes = [
   'oracle.database/autonomousdatabases',
   'oracle.database/cloudvmclusters',
   'oracle.database/exadbvmclusters',
+  'oracle.database/goldengatedeployments',
   'private.messagingconnectors/private.messagingconnectors/connectors',
   'wandisco.fusion/migrators',
   'wandisco.fusion/migrators/datatransferagents',

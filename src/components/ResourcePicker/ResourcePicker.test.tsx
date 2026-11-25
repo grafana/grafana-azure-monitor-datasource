@@ -6,6 +6,7 @@ import { selectors as e2eSelectors } from '@grafana/e2e-selectors';
 import { config } from '@grafana/runtime';
 import { mockComboboxRect } from '@grafana/test-utils';
 
+import { type AzureMonitorResource } from '../../dataquery';
 import type Datasource from '../../datasource';
 import { selectors } from '../../e2e/selectors';
 import createMockDatasource, { createMockLocations, createMockMetricsNamespaces } from '../../mocks/datasource';
@@ -18,6 +19,7 @@ import {
 } from '../../mocks/resourcePickerRows';
 import { type DeepPartial } from '../../mocks/utils';
 import ResourcePickerData, { type ResourcePickerQueryType } from '../../resourcePicker/resourcePickerData';
+import AdvancedResourcePicker from '../MetricsQueryEditor/AdvancedResourcePicker';
 
 import ResourcePicker, { RECENT_RESOURCES_KEY } from './ResourcePicker';
 import { type ResourceRowGroup, ResourceRowType } from './types';
@@ -395,6 +397,37 @@ describe('AzureMonitor ResourcePicker', () => {
     const checkbox = await screen.findAllByLabelText('web-server');
     expect(checkbox).toHaveLength(1);
     expect(checkbox.at(0)).toBeChecked();
+  });
+
+  describe('when the query editor re-renders while the picker is open', () => {
+    const metricsProps = {
+      ...defaultProps,
+      queryType: 'metrics' as const,
+      renderAdvanced: (
+        resources: Array<string | AzureMonitorResource>,
+        onChange: (resources: Array<string | AzureMonitorResource>) => void
+      ) => <AdvancedResourcePicker resources={resources as AzureMonitorResource[]} onChange={onChange} />,
+    };
+
+    it('keeps the typed advanced values when the editor re-renders with no resources', async () => {
+      const { rerender } = render(<ResourcePicker {...metricsProps} resources={[]} />);
+      await userEvent.click(await screen.findByText('Advanced'));
+      await userEvent.type(await screen.findByLabelText('Subscription'), 'def-123');
+      expect(screen.getByLabelText('Subscription')).toHaveValue('def-123');
+
+      rerender(<ResourcePicker {...metricsProps} resources={[]} />);
+
+      expect(screen.getByLabelText('Subscription')).toHaveValue('def-123');
+    });
+
+    it('still runs a search typed just before the editor re-renders with no resources', async () => {
+      const { rerender } = render(<ResourcePicker {...defaultProps} resources={[]} />);
+      await userEvent.type(await screen.findByLabelText('Resource search'), 'sea');
+
+      rerender(<ResourcePicker {...defaultProps} resources={[]} />);
+
+      expect(await screen.findByLabelText('search-result')).toBeInTheDocument();
+    });
   });
 
   describe('when rendering resource picker without any selectable entry types', () => {

@@ -20,11 +20,11 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/tracing"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
-	"github.com/open-feature/go-sdk/openfeature"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/singleflight"
 
+	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/featureflags"
 	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/kinds/dataquery"
 	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/loganalytics"
 	azTime "github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/time"
@@ -94,14 +94,67 @@ func (e *AzureMonitorDatasource) ResourceRequest(rw http.ResponseWriter, req *ht
 	return e.Proxy.Do(rw, req, cli)
 }
 
-// Registered in pkg/services/featuremgmt; referenced by name because the
-// coreplugins depguard rule forbids importing Grafana core packages.
-const batchAPIFlag = "datasources.azureMonitorBatchAPI"
+// multiResourceCompatibleTypes lists the resource types the subscription-level
+// ARM metrics API can query for several resources in one request. It mirrors
+// src/azureMetadata/multiResourceCompatibleTypes.json, which the frontend uses;
+// TestMultiResourceCompatibleTypesMatchFrontend fails if the two drift apart.
+var multiResourceCompatibleTypes = map[string]bool{
+	"microsoft.cache/redis":                                 true,
+	"microsoft.documentdb/mongoclusters":                    true,
+	"microsoft.dbforpostgresql/flexibleservers":             true,
+	"microsoft.storagecache/amlfilesystems":                 true,
+	"microsoft.monitor/accounts":                            true,
+	"microsoft.databoxedge/databoxedgedevices":              true,
+	"microsoft.azurestackhci/clusters":                      true,
+	"microsoft.dataprotection/backupvaults":                 true,
+	"microsoft.networkcloud/baremetalmachines":              true,
+	"microsoft.netapp/netappaccounts/capacitypools":         true,
+	"microsoft.netapp/netappaccounts/capacitypools/volumes": true,
+	"microsoft.network/networkwatchers/connectionmonitors":  true,
+	"microsoft.keyvault/vaults":                             true,
+	"microsoft.recoveryservices/vaults":                     true,
+	"microsoft.sql/servers/databases":                       true,
+	"microsoft.sql/servers/elasticpools":                    true,
+	"microsoft.compute/virtualmachinescalesets":             true,
+	"microsoft.compute/virtualmachines":                     true,
+	"microsoft.signalrservice/webpubsub":                    true,
+}
 
-// Defaults to off when the flag cannot be evaluated (e.g. the standalone
-// plugin binary has no provider).
-func isBatchFlagEnabled(ctx context.Context) bool {
-	return openfeature.NewDefaultClient().Boolean(ctx, batchAPIFlag, false, openfeature.TransactionContext(ctx))
+// needsResourceFanOut reports whether a multi-resource query must be split into
+// one resource-level request per resource on the legacy ARM path. buildQuery
+// sends multi-resource queries as a single subscription-level request using the
+// query-level subscription and region, which only works for multi-resource
+// compatible types and when no resource overrides that subscription or region.
+// The batch-enabled editor allows selections that break both rules.
+func needsResourceFanOut(model dataquery.AzureMonitorQuery) bool {
+	az := model.AzureMonitor
+	if az == nil || len(az.Resources) <= 1 {
+		return false
+	}
+	ns := ""
+	if az.MetricNamespace != nil {
+		ns = strings.ToLower(strings.TrimSpace(*az.MetricNamespace))
+	}
+	if !multiResourceCompatibleTypes[ns] {
+		return true
+	}
+	sub := ""
+	if model.Subscription != nil {
+		sub = *model.Subscription
+	}
+	region := ""
+	if az.Region != nil {
+		region = *az.Region
+	}
+	for _, r := range az.Resources {
+		if r.Subscription != nil && *r.Subscription != "" && !strings.EqualFold(*r.Subscription, sub) {
+			return true
+		}
+		if r.Region != nil && *r.Region != "" && !strings.EqualFold(*r.Region, region) {
+			return true
+		}
+	}
+	return false
 }
 
 // executeTimeSeriesQuery does the following:
@@ -111,7 +164,8 @@ func isBatchFlagEnabled(ctx context.Context) bool {
 func (e *AzureMonitorDatasource) ExecuteTimeSeriesQuery(ctx context.Context, originalQueries []backend.DataQuery, dsInfo types.DatasourceInfo, client *http.Client, url string, fromAlert bool) (*backend.QueryDataResponse, error) {
 	// Short-circuiting keeps the flag evaluation off the hot path for
 	// datasources that did not opt in via batchAPIEnabled.
-	if dsInfo.Settings.BatchAPIEnabled && isBatchFlagEnabled(ctx) {
+	// The default matches the flag's definition, so the flag stays on where the host advertises no flag endpoint.
+	if dsInfo.Settings.BatchAPIEnabled && featureflags.IsEnabled(ctx, featureflags.BatchAPI, true) {
 		// The batch data-plane service only exists when the datasource has a
 		// metrics data-plane route (e.g. metrics.monitor.azure.com, or .cn for
 		// China); customized-cloud configs must supply the metricsDataPlane
@@ -123,14 +177,24 @@ func (e *AzureMonitorDatasource) ExecuteTimeSeriesQuery(ctx context.Context, ori
 			e.Logger.Error("Azure Monitor datasource has batchAPIEnabled=true but no batch metrics service is configured")
 			return nil, backend.DownstreamError(errors.New("the Azure Monitor metrics batch service is not configured; please validate your Azure cloud configuration includes the metrics data plane route"))
 		}
+		e.Logger.Debug("routing metrics queries to the Batch data-plane API", "api", "batch", "endpoint", svc.URL, "numQueries", len(originalQueries))
 		return e.executeBatchTimeSeriesQuery(ctx, originalQueries, dsInfo, client, svc.HTTPClient, svc.URL)
 	}
 	if dsInfo.Settings.BatchAPIEnabled {
 		e.Logger.Warn("Azure Monitor datasource has batchAPIEnabled=true but the datasources.azureMonitorBatchAPI feature flag is off; falling back to the legacy ARM metrics endpoint")
 	}
+	e.Logger.Debug("routing metrics queries to the ARM control-plane API", "api", "arm", "endpoint", url, "numQueries", len(originalQueries))
 
 	result := backend.NewQueryDataResponse()
 	for _, query := range originalQueries {
+		// Queries saved while the batch API was enabled can select resources
+		// that a single subscription-level request cannot serve. Fetch those
+		// per resource instead. A decode error is left for buildQuery to report.
+		var model dataquery.AzureMonitorQuery
+		if err := json.Unmarshal(query.JSON, &model); err == nil && needsResourceFanOut(model) {
+			e.executeFannedOutQuery(ctx, query, model, dsInfo, client, url, result)
+			continue
+		}
 		azureQuery, err := e.buildQuery(query, dsInfo)
 		if err != nil {
 			result.Responses[query.RefID] = backend.ErrorResponseWithErrorSource(err)

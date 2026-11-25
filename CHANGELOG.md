@@ -1,14 +1,55 @@
+## Unreleased
+
+- Fix the resource picker discarding typed Advanced values and searches when the query editor updates
+- Fix invalid saved credentials, such as a missing tenant ID, counting as plugin errors instead of downstream errors
+
+## 13.1.0
+
+- Add support for workload identity credentials (tenant and client ID), and backend assertion support when workload identity is enabled in [#144](https://github.com/grafana/grafana-azure-monitor-datasource/pull/144)
+- Add a Health Models query editor in [#166](https://github.com/grafana/grafana-azure-monitor-datasource/pull/166)
+- Fix out-of-memory crashes when a Log Analytics time series result is too large for a wide frame, and return the table with a warning instead in [#172](https://github.com/grafana/grafana-azure-monitor-datasource/pull/172)
+- Fix the Enable Batch API setting having no effect on metrics queries in [#181](https://github.com/grafana/grafana-azure-monitor-datasource/pull/181)
+- Fix multi-resource metrics queries and the query editor failing with "not enabled for Cross Resource metrics" when the Batch API is off in [#182](https://github.com/grafana/grafana-azure-monitor-datasource/pull/182)
+- Fix Save & test failing with a 409 after loading subscriptions in the config editor in [#137](https://github.com/grafana/grafana-azure-monitor-datasource/pull/137)
+- Refresh the list of metrics resource types in [#165](https://github.com/grafana/grafana-azure-monitor-datasource/pull/165)
+- Update backend dependencies in [#169](https://github.com/grafana/grafana-azure-monitor-datasource/pull/169)
+- Fix backend requests (e.g. alert evaluation) not using fallback credentials when they are enabled and username assertion is on, by updating grafana-azure-sdk-go to v2.6.1 in [#185](https://github.com/grafana/grafana-azure-monitor-datasource/pull/185)
+
+## 13.0.8
+
+- Keep traces correlation requests on the configured host in [#161](https://github.com/grafana/grafana-azure-monitor-datasource/pull/161)
+- Fix dimension filter values failing with 403 in [#148](https://github.com/grafana/grafana-azure-monitor-datasource/pull/148)
+- Update dependencies
+
+## 13.0.7
+
+- Fix code editor syntax highlighter
+
+## 13.0.6
+
+- Update backend dependencies
+- Fix a connection freeze between Grafana and the plugin under heavy query load by updating google.golang.org/grpc to v1.85.0 ([grpc/grpc-go#9330](https://github.com/grpc/grpc-go/issues/9330))
+
 ## 13.0.5
 
-- Chore: Sync new PRs from grafana/grafana in [#123](https://github.com/grafana/grafana-azure-monitor-datasource/pull/123)
+- Bump backend dependency
 
 ## 13.0.4
 
 - Bump frontend dependency `brace-expansion` to address CVE-2026-102276 and CVE-2026-102278
+- Add per-service timeouts for logs, metrics, and resource graph queries in [#109](https://github.com/grafana/grafana-azure-monitor-datasource/pull/109)
+- Add support for the Auxiliary Logs tier in [#121](https://github.com/grafana/grafana-azure-monitor-datasource/pull/121)
+- Download translations from Crowdin in [#125](https://github.com/grafana/grafana-azure-monitor-datasource/pull/125)
+- Mark plugin errors as downstream errors in [#133](https://github.com/grafana/grafana-azure-monitor-datasource/pull/133)
+- Use OpenFeature providers from `@grafana/runtime` in [#129](https://github.com/grafana/grafana-azure-monitor-datasource/pull/129)
+- Resolve dependency security vulnerabilities in [#135](https://github.com/grafana/grafana-azure-monitor-datasource/pull/135)
+- Chore: Sync new PRs from grafana/grafana in [#123](https://github.com/grafana/grafana-azure-monitor-datasource/pull/123)
+- Update Go to 1.27.3 in [#140](https://github.com/grafana/grafana-azure-monitor-datasource/pull/140)
 
 ## 13.0.3
 
 - Add Dimensions and Dimension Values template variable query types in [#118](https://github.com/grafana/grafana-azure-monitor-datasource/pull/118)
+- Allowlist resource-proxy calls by method and path in [#120](https://github.com/grafana/grafana-azure-monitor-datasource/pull/120)
 - Fix security vulnerabilities (CVE-2026-84375)
 
 ## 13.0.2

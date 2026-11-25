@@ -91,11 +91,6 @@ const ResourcePicker = ({
   });
   const [view, setView] = useState<'picker' | 'recent'>('picker');
 
-  // Sync the resourceURI prop to internal state
-  useEffect(() => {
-    setInternalSelected(resources);
-  }, [resources]);
-
   const loadFilterOptions = useCallback(async () => {
     setIsLoadingSubscriptions(true);
     const subscriptions = await datasource.getSubscriptions();

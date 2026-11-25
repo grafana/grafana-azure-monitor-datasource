@@ -53,6 +53,11 @@
       "placeholder-symbol-client-secret": "nastaveno",
       "reset-symbol-client-secret": "Obnovit"
     },
+    "auxiliary-logs-toggle": {
+      "aria-label-enable-auxiliary-logs": "Pomocné protokoly",
+      "description-auxiliary-logs": "Povolení této funkce zapříčiní vznik nákladů Azure Monitor na dotaz na panelech dashboardů, které dotazují tabulky nakonfigurované pro <2>pomocné protokoly</2>. Pomocné protokoly nemají SLA pro dobu odezvy, jsou určeny pouze pro ad hoc dotazy a prozkoumávání dat a neměly by se používat pro dashboardy vyžadující data v reálném čase ani pro upozorňování.",
+      "label-enable-auxiliary-logs": "Povolit pomocné protokoly"
+    },
     "azure-cheat-sheet": {
       "aria-label-raw-query": "Nezpracovaný dotaz: {{queryDisplayName}}",
       "aria-label-use-query": "Použít toto tlačítko dotazu",
@@ -84,8 +89,26 @@
       "label-enable-batch-api": "Povolit dávkové API"
     },
     "config-editor": {
+      "aria-label-logs-timeout": "Časový limit protokolů v sekundách",
+      "aria-label-metrics-timeout": "Časový limit metrik v sekundách",
+      "aria-label-resource-graph-timeout": "Časový limit grafu zdrojů v sekundách",
       "description-additional-settings": "Další nastavení jsou volitelná nastavení, která lze nakonfigurovat pro větší kontrolu nad zdrojem dat. Patří sem zabezpečený proxy server Socks, časový limit požadavku a přeposlané soubory cookie.",
-      "title-additional-settings": "Další nastavení"
+      "description-advanced-http-settings-logs": "Dotazy protokolů a trasování používají časový limit protokolů.",
+      "description-advanced-http-settings-metrics": "Odkazy na metriky a Azure Portal používají časový limit metrik.",
+      "label-allowed-cookies": "Povolené soubory cookie",
+      "label-logs-timeout": "Časový limit protokolů",
+      "label-metrics-timeout": "Časový limit metrik",
+      "label-resource-graph-timeout": "Časový limit grafu zdrojů",
+      "placeholder-logs-timeout": "180",
+      "placeholder-metrics-timeout": "30",
+      "placeholder-new-cookie": "Nový soubor cookie (pro přidání stiskněte Enter)",
+      "placeholder-resource-graph-timeout": "30",
+      "title-additional-settings": "Další nastavení",
+      "title-advanced-http-settings": "Pokročilá nastavení HTTP",
+      "tooltip-allowed-cookies": "Proxy server Grafana ve výchozím nastavení odstraňuje předané soubory cookie. Zadejte soubory cookie podle názvu, které by měly být přeposlány do zdroje dat.",
+      "tooltip-logs-timeout": "Časový limit požadavku HTTP pro dotazy protokolů a trasování (v sekundách). Výchozí hodnota: 180 s (3 minuty).",
+      "tooltip-metrics-timeout": "Časový limit požadavku HTTP pro dotazy na metriky (v sekundách). Používá se také při vytváření odkazů na Azure Portal. Výchozí hodnota: 30 s",
+      "tooltip-resource-graph-timeout": "Časový limit požadavku HTTP pro dotazy na graf zdrojů (v sekundách). Výchozí hodnota: 30 s"
     },
     "current-user-fallback-credentials": {
       "alert-fallback-credentials-disabled": "Záložní přihlašovací údaje byly zakázány. Vzhledem k tomu, že ověření uživatele samo o sobě podporuje pouze požadavky s uživatelem v rozsahu, funkce, jako je upozorňování, zaznamenané dotazy nebo vykazování, nebudou fungovat podle očekávání. Další podrobnosti najdete v <2>dokumentaci</2>.",
@@ -167,6 +190,15 @@
       "label-group-by": "Seřadit podle",
       "tooltip-group-by": "Uspořádejte výsledky do kategorií na základě zadaných sloupců. Funkci Seřadit podle lze použít nezávisle k výpisu jedinečných hodnot ve vybraných sloupcích nebo v kombinaci s agregovanými funkcemi k vytvoření souhrnných statistik pro každou skupinu. Při samostatném použití vrátí odlišné kombinace zadaných sloupců."
     },
+    "health-models-query-editor": {
+      "aria-label-health-model": "",
+      "aria-label-subscription": "",
+      "aria-label-type": "",
+      "label-health-model": "",
+      "label-subscription": "",
+      "label-type": "",
+      "no-health-models-found": ""
+    },
     "kql-preview": {
       "button-hide": "Skrýt",
       "button-show": "Zobrazit",
@@ -182,19 +214,47 @@
       "tooltip-limit": "Omezte počet vrácených řádků (výchozí hodnota je 1 000)."
     },
     "logs-management": {
+      "body-auxiliary-logs-queries": "Opravdu chcete přepnout na pomocné protokoly?",
       "body-basic-logs-queries": "Opravdu chcete přepnout na Základní protokoly?",
       "confirmText-confirm": "Potvrdit",
+      "description-auxiliary-logs-queries": "Dotazy na pomocné protokoly jsou zpoplatněny na základě množství naskenovaných dat. Pomocné protokoly nemají SLA pro dobu odezvy a neměly by se používat pro dashboardy vyžadující data v reálném čase ani pro upozorňování.",
       "description-basic-logs-queries": "Dotazy na základní protokoly jsou zpoplatněny na základě množství naskenovaných dat.",
+      "label-analytics": "Analytika",
+      "label-auxiliary": "Pomocné",
+      "label-basic": "Základní",
       "label-logs": "Protokoly",
+      "title-auxiliary-logs-queries": "Dotazy na pomocné protokoly",
       "title-basic-logs-queries": "Dotazy na základní protokoly",
-      "tooltip-logs": "Určuje, zda se má spustit dotaz Základní protokoly nebo Analytické protokoly."
+      "tooltip-logs": "Určuje, zda se má spustit dotaz Základní protokoly nebo Analytické protokoly.",
+      "tooltip-logs-all": "Určuje, zda se má spustit dotaz typu Analytické protokoly, Základní protokoly nebo Pomocné protokoly.",
+      "tooltip-logs-aux": "Určuje, zda se má spustit dotaz typu Analytické protokoly nebo Pomocné protokoly."
     },
     "logs-query-builder": {
       "title-no-tables": "Zdroj byl úspěšně načten, ale bez tabulek"
     },
     "logs-query-editor": {
       "learn-more": "Další informace",
-      "view-query": "Zobrazit dotaz na Azure Portal"
+      "notice-auxiliary-single-resource": "Při použití pomocných protokolů můžete vybrat vždy pouze jeden zdroj.",
+      "notice-basic-single-resource": "Při použití základních protokolů můžete vybrat vždy pouze jeden zdroj.",
+      "notice-same-resource-type": "Můžete vybrat pouze položky stejného typu zdroje.",
+      "tier-switch-body-analytics": "<0>{{tableName}}</0> je tabulka analýzy.",
+      "tier-switch-body-auxiliary": "<0>{{tableName}}</0> je tabulka pomocných protokolů – je zpoplatněna za každý naskenovaný GiB, nemá SLA pro dobu odezvy a není vhodná pro scénáře v reálném čase ani pro scénáře s upozorňováním.",
+      "tier-switch-body-basic": "<0>{{tableName}}</0> je tabulka základních protokolů – je zpoplatněna za každý naskenovaný GiB.",
+      "tier-switch-revert": "Vrátit zpět na {{fromTier}}",
+      "tier-switch-title": "Úroveň dotazu nastavena na {{toTier}}",
+      "view-query": "Zobrazit dotaz na Azure Portal",
+      "warning-auxiliary-data-ingested": "Tento dotaz na pomocné protokoly zpracovává {{dataIngested}} GiB při spuštění. Pomocné protokoly nemají SLA pro dobu odezvy a nejsou vhodné pro scénáře v reálném čase ani pro scénáře s upozorňováním. ",
+      "warning-auxiliary-raw": "Toto je dotaz na pomocné protokoly – používá koncový bod vyhledávání, je zpoplatněn za každý naskenovaný GiB, nemá SLA pro dobu odezvy a není vhodný pro scénáře v reálném čase ani pro scénáře s upozorňováním. Tabulky plánu analýzy nelze v tomto režimu dotazovat (pro ně použijte úroveň Analýza). ",
+      "warning-basic-raw": "Toto je dotaz na základní protokoly – používá koncový bod vyhledávání a je zpoplatněn za každý naskenovaný GiB. Tabulky plánu analýzy nelze v tomto režimu dotazovat (pro ně použijte úroveň Analýza). ",
+      "warning-data-ingested": "Tento dotaz zpracovává {{dataIngested}} GiB při spuštění. "
+    },
+    "logs-table-section": {
+      "description-auxiliary-disabled": "Tato tabulka je v plánu Pomocné protokoly. Chcete-li ji dotazovat, povolte v nastavení zdroje dat možnost „Pomocné protokoly“.",
+      "description-auxiliary-enabled": "Výběrem této tabulky přepnete režim dotazu na pomocné protokoly",
+      "description-basic-disabled": "Tato tabulka je v plánu Základní protokoly. Chcete-li ji dotazovat, povolte v nastavení zdroje dat možnost „Základní protokoly“.",
+      "description-basic-enabled": "Výběrem této tabulky přepnete režim dotazu na základní protokoly",
+      "description-plan-unavailable": "Tuto tabulku nelze vybrat, protože se nepodařilo určit její plán protokolů.",
+      "label-all-columns": "Všechny sloupce"
     },
     "metric-name-field": {
       "label-metric": "Metrika"
@@ -323,6 +383,8 @@
     },
     "variable-editor": {
       "aria-label-select-custom-namespace": "Vyberte vlastní jmenný prostor",
+      "aria-label-select-dimension-name": "Vybrat název dimenze",
+      "aria-label-select-metric-name": "Vybrat název metriky",
       "aria-label-select-namespace": "Vyberte jmenný prostor",
       "aria-label-select-query-type": "Vyberte typ dotazu",
       "aria-label-select-region": "Vyberte oblast",
@@ -330,6 +392,8 @@
       "aria-label-select-resource-group": "Vyberte skupinu zdrojů",
       "aria-label-select-subscription": "Vyberte předplatné",
       "label-custom-namespace": "Vlastní jmenný prostor",
+      "label-dimension-name": "Název dimenze",
+      "label-metric-name": "Název metriky",
       "label-namespace": "Jmenný prostor",
       "label-query-type": "Typ dotazu",
       "label-region": "Oblast",
@@ -342,6 +406,12 @@
       "placeholder-region": "Nepovinný",
       "placeholder-resource-group": "Nepovinný",
       "title-error-occurred": "Při požadování metadat ze služby Azure Monitor došlo k chybě"
+    },
+    "workload-identity-credentials": {
+      "aria-label-client-id": "",
+      "aria-label-tenant-id": "",
+      "label-client-id": "",
+      "label-tenant-id": ""
     }
   }
 }

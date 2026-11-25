@@ -61,7 +61,8 @@ const AdvancedResourcePicker = ({ resources, onChange }: ResourcePickerProps<Azu
   };
 
   const onCommonPropChange = (r: Partial<AzureMonitorResource>) => {
-    onChange(resources.map((resource) => ({ ...resource, ...r })));
+    const current = resources.length ? resources : [{}];
+    onChange(current.map((resource) => ({ ...resource, ...r })));
   };
 
   return (
