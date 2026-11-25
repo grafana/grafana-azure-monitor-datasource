@@ -1298,8 +1298,7 @@ func BenchmarkEncodeQuery(b *testing.B) {
 
 func TestGetCorrelationWorkspaces_FollowsNextLink(t *testing.T) {
 	var page2Hits int
-	var svr *httptest.Server
-	svr = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if strings.Contains(r.URL.Path, "page-2") {
 			page2Hits++
