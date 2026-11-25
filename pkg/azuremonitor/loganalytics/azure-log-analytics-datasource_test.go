@@ -13,12 +13,14 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/grafana/grafana-azure-sdk-go/v2/azcredentials"
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/httpclient"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
@@ -1293,4 +1295,66 @@ func BenchmarkEncodeQuery(b *testing.B) {
 			b.Fatal(err)
 		}
 	}
+}
+
+func Test_executeQueryHoldsWorkspaceNotFound(t *testing.T) {
+	notFoundServer := func(t *testing.T, code string) (*httptest.Server, *atomic.Int32) {
+		var calls atomic.Int32
+		svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			calls.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			_, err := fmt.Fprintf(w, `{"error":{"message":"The workspace could not be found","code":%q}}`, code)
+			require.NoError(t, err)
+		}))
+		t.Cleanup(svr.Close)
+		return svr, &calls
+	}
+	query := &AzureLogAnalyticsQuery{
+		RefID:        "A",
+		ResultFormat: dataquery.ResultFormatTable,
+		QueryType:    dataquery.AzureQueryTypeLogAnalytics,
+		URL:          "v1/workspaces/missing/query",
+		JSON:         []byte(`{}`),
+		Query:        "Heartbeat",
+	}
+	run := func(ds *AzureLogAnalyticsDatasource, svr *httptest.Server, dsInfo types.DatasourceInfo) error {
+		_, err := ds.executeQuery(context.Background(), query, dsInfo, svr.Client(), svr.URL)
+		return err
+	}
+
+	t.Run("WorkspaceNotFoundError is returned without a new request", func(t *testing.T) {
+		svr, calls := notFoundServer(t, "WorkspaceNotFoundError")
+		ds := &AzureLogAnalyticsDatasource{Logger: log.NewNullLogger()}
+
+		require.NotContains(t, run(ds, svr, types.DatasourceInfo{}).Error(), "sends no request to Azure")
+		for range 2 {
+			err := run(ds, svr, types.DatasourceInfo{})
+			require.ErrorContains(t, err, "WorkspaceNotFoundError")
+			require.ErrorContains(t, err, "sends no request to Azure")
+			require.True(t, backend.IsDownstreamError(err))
+		}
+		require.Equal(t, int32(1), calls.Load())
+	})
+
+	t.Run("a 404 for another reason is requested again", func(t *testing.T) {
+		svr, calls := notFoundServer(t, "PathNotFoundError")
+		ds := &AzureLogAnalyticsDatasource{Logger: log.NewNullLogger()}
+
+		for range 3 {
+			require.Error(t, run(ds, svr, types.DatasourceInfo{}))
+		}
+		require.Equal(t, int32(3), calls.Load())
+	})
+
+	t.Run("user-scoped auth is requested again", func(t *testing.T) {
+		svr, calls := notFoundServer(t, "WorkspaceNotFoundError")
+		ds := &AzureLogAnalyticsDatasource{Logger: log.NewNullLogger()}
+		dsInfo := types.DatasourceInfo{Credentials: &azcredentials.AadCurrentUserCredentials{}}
+
+		for range 3 {
+			require.Error(t, run(ds, svr, dsInfo))
+		}
+		require.Equal(t, int32(3), calls.Load())
+	})
 }

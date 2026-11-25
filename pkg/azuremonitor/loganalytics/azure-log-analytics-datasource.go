@@ -479,6 +479,10 @@ func (e *AzureLogAnalyticsDatasource) executeQuery(ctx context.Context, query *A
 		}
 	}
 
+	if err := e.notFound.Get(dsInfo.Credentials, query.URL); err != nil {
+		return nil, err
+	}
+
 	req, err := e.createRequest(ctx, url, query)
 	if err != nil {
 		return nil, err
@@ -507,6 +511,7 @@ func (e *AzureLogAnalyticsDatasource) executeQuery(ctx context.Context, query *A
 
 	logResponse, err := e.unmarshalResponse(res)
 	if err != nil {
+		e.notFound.Hold(dsInfo.Credentials, query.URL, res.StatusCode, err)
 		return nil, err
 	}
 

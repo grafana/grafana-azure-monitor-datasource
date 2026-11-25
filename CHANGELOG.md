@@ -1,6 +1,7 @@
 ## Unreleased
 
 - Fix the resource picker discarding typed Advanced values and searches when the query editor updates
+- Return Azure's "not found" error for a missing resource, resource group, subscription or workspace for 65 seconds without a new request to Azure
 
 ## 13.1.0
 

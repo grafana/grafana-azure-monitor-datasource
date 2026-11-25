@@ -46,6 +46,8 @@ type AzureMonitorDatasource struct {
 	// so that a burst of queries against the same subscription only performs
 	// one upstream HTTP call.
 	subscriptionFlights singleflight.Group
+
+	notFound utils.NotFoundCache
 }
 
 // subscriptionCacheTTL is the lifetime of a cached subscription display name.
@@ -64,22 +66,6 @@ type subscriptionCacheEntry struct {
 // on the same datasource over time.
 func subscriptionCacheKey(namespace string, dsId int64, baseUrl, subscriptionId string) string {
 	return fmt.Sprintf("%s|%d|%s|%s", namespace, dsId, baseUrl, subscriptionId)
-}
-
-// isUserScopedAuth reports whether the datasource issues requests with an
-// identity that varies per Grafana user. In those modes persistent caching
-// is unsafe: a user who has lost access to a subscription would continue to
-// receive a cached display name until the TTL expires. Singleflight
-// coalescing within a single burst is still safe and still applied.
-func isUserScopedAuth(creds azcredentials.AzureCredentials) bool {
-	if creds == nil {
-		return false
-	}
-	switch creds.AzureAuthType() {
-	case azcredentials.AzureAuthCurrentUserIdentity, azcredentials.AzureAuthClientSecretObo:
-		return true
-	}
-	return false
 }
 
 var (
@@ -434,7 +420,7 @@ func getParams(azJSONModel *dataquery.AzureMetricQuery, query backend.DataQuery)
 }
 
 func (e *AzureMonitorDatasource) retrieveSubscriptionDetails(cli *http.Client, ctx context.Context, subscriptionId string, baseUrl string, dsId int64, namespace string, creds azcredentials.AzureCredentials) (string, error) {
-	userScoped := isUserScopedAuth(creds)
+	userScoped := utils.IsUserScopedAuth(creds)
 	cacheKey := subscriptionCacheKey(namespace, dsId, baseUrl, subscriptionId)
 
 	// Persistent caching is only safe in auth modes where every request from
@@ -546,6 +532,10 @@ func (e *AzureMonitorDatasource) fetchSubscriptionDisplayName(cli *http.Client, 
 }
 
 func (e *AzureMonitorDatasource) executeQuery(ctx context.Context, query *types.AzureMonitorQuery, dsInfo types.DatasourceInfo, cli *http.Client, url string) (*backend.DataResponse, error) {
+	if err := e.notFound.Get(dsInfo.Credentials, query.URL); err != nil {
+		return nil, err
+	}
+
 	req, err := e.createRequest(ctx, url)
 	if err != nil {
 		return nil, err
@@ -581,6 +571,7 @@ func (e *AzureMonitorDatasource) executeQuery(ctx context.Context, query *types.
 
 	data, err := e.unmarshalResponse(res)
 	if err != nil {
+		e.notFound.Hold(dsInfo.Credentials, query.URL, res.StatusCode, err)
 		return nil, err
 	}
 

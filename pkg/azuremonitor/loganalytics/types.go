@@ -7,12 +7,15 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/kinds/dataquery"
 	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/types"
+	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/utils"
 )
 
 // AzureLogAnalyticsDatasource calls the Azure Log Analytics API's
 type AzureLogAnalyticsDatasource struct {
 	Proxy  types.ServiceProxy
 	Logger log.Logger
+
+	notFound utils.NotFoundCache
 }
 
 // AzureLogAnalyticsQuery is the query request that is built from the saved values for

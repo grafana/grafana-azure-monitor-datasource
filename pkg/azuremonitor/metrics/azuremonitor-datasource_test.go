@@ -1175,3 +1175,68 @@ func TestRetrieveSubscriptionDetails_ServicePrincipalAuthSharesAcrossUsers(t *te
 	require.NoError(t, err)
 	require.Equal(t, int64(1), hits.Load(), "service-principal mode shares cache across users")
 }
+
+func TestExecuteQuery_HoldsResourceNotFound(t *testing.T) {
+	notFoundServer := func(t *testing.T, code string) (*httptest.Server, *atomic.Int64) {
+		var hits atomic.Int64
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			hits.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = fmt.Fprintf(w, `{"error":{"code":%q,"message":"The Resource 'vm' under resource group 'rg' was not found."}}`, code)
+		}))
+		t.Cleanup(srv.Close)
+		return srv, &hits
+	}
+	query := func(resource string) *types.AzureMonitorQuery {
+		return &types.AzureMonitorQuery{
+			URL:          "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/" + resource + "/providers/microsoft.insights/metrics",
+			Params:       url.Values{"metricnames": {"Percentage CPU"}},
+			Subscription: "sub",
+		}
+	}
+	run := func(ds *AzureMonitorDatasource, srv *httptest.Server, dsInfo types.DatasourceInfo, q *types.AzureMonitorQuery) error {
+		_, err := ds.executeQuery(context.Background(), q, dsInfo, srv.Client(), srv.URL)
+		return err
+	}
+
+	for _, code := range []string{"ResourceNotFound", "ResourceGroupNotFound", "SubscriptionNotFound", "ParentResourceNotFound", "MissingSubscription"} {
+		t.Run(code+" is returned without a new request for the same resource", func(t *testing.T) {
+			srv, hits := notFoundServer(t, code)
+			ds := &AzureMonitorDatasource{Logger: backend.NewLoggerWith("test", t.Name())}
+
+			require.NotContains(t, run(ds, srv, types.DatasourceInfo{}, query("vm")).Error(), "sends no request to Azure")
+			for range 2 {
+				err := run(ds, srv, types.DatasourceInfo{}, query("vm"))
+				require.ErrorContains(t, err, code)
+				require.ErrorContains(t, err, "sends no request to Azure")
+				require.True(t, backend.IsDownstreamError(err))
+			}
+			require.Equal(t, int64(1), hits.Load())
+
+			require.Error(t, run(ds, srv, types.DatasourceInfo{}, query("other-vm")))
+			require.Equal(t, int64(2), hits.Load())
+		})
+	}
+
+	t.Run("a 404 for a reason other than a missing resource is requested again", func(t *testing.T) {
+		srv, hits := notFoundServer(t, "InvalidResourceNamespace")
+		ds := &AzureMonitorDatasource{Logger: backend.NewLoggerWith("test", t.Name())}
+
+		for range 3 {
+			require.Error(t, run(ds, srv, types.DatasourceInfo{}, query("vm")))
+		}
+		require.Equal(t, int64(3), hits.Load())
+	})
+
+	t.Run("user-scoped auth is requested again", func(t *testing.T) {
+		srv, hits := notFoundServer(t, "ResourceNotFound")
+		ds := &AzureMonitorDatasource{Logger: backend.NewLoggerWith("test", t.Name())}
+		dsInfo := types.DatasourceInfo{Credentials: &azcredentials.AadCurrentUserCredentials{}}
+
+		for range 3 {
+			require.Error(t, run(ds, srv, dsInfo, query("vm")))
+		}
+		require.Equal(t, int64(3), hits.Load())
+	})
+}
