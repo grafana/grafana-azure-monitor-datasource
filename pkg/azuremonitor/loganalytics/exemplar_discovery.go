@@ -17,6 +17,7 @@ import (
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
+	"github.com/open-feature/go-sdk/openfeature"
 
 	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/types"
 )
@@ -41,7 +42,18 @@ const (
 	// splits, and per-component checks. It is half of Azure Monitor's 200 queries per 30 seconds
 	// per user. Checking exemplarComponentCap components needs 10 union queries when none fail.
 	exemplarMaxQueries = 100
+	// exemplarComponentDiscoveryFlag gates component discovery for trace exemplars that have no
+	// default subscription. It is a datasource-scoped flag defined in grafana/deployment_tools
+	// (ksonnet/environments/hosted-grafana/waves/feature-toggles/goff/datasources), not in
+	// grafana/grafana's registry. While it is off, exemplar queries use the default subscription.
+	exemplarComponentDiscoveryFlag = "grafana-azure-monitor-datasource.exemplarComponentDiscovery"
 )
+
+// exemplarComponentDiscoveryEnabled evaluates the discovery flag at call time. Flag values can
+// change during a session, so the result is not cached.
+func exemplarComponentDiscoveryEnabled(ctx context.Context) bool {
+	return openfeature.NewDefaultClient().Boolean(ctx, exemplarComponentDiscoveryFlag, false, openfeature.TransactionContext(ctx))
+}
 
 // componentCheck is the outcome of checking one component for an operation ID.
 type componentCheck int

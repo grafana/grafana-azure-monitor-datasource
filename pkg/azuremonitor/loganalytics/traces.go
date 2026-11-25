@@ -209,9 +209,7 @@ func buildAppInsightsQuery(ctx context.Context, query backend.DataQuery, dsInfo 
 	// that holds the trace. It is the query target and stays in the resource set after correlation.
 	discoveredComponent := ""
 	if query.QueryType == string(dataquery.AzureQueryTypeTraceExemplar) {
-		if dsInfo.Settings.SubscriptionId != "" {
-			resources = []string{fmt.Sprintf("/subscriptions/%s", dsInfo.Settings.SubscriptionId)}
-		} else {
+		if dsInfo.Settings.SubscriptionId == "" && exemplarComponentDiscoveryEnabled(ctx) {
 			operationID := ""
 			if azureTracesTarget.OperationId != nil {
 				operationID = *azureTracesTarget.OperationId
@@ -225,6 +223,13 @@ func buildAppInsightsQuery(ctx context.Context, query backend.DataQuery, dsInfo 
 			}
 			discoveredComponent = componentID
 			resources = []string{componentID}
+		} else {
+			subscription, err := utils.GetFirstSubscriptionOrDefault(ctx, dsInfo, logger)
+			if err != nil {
+				errorMessage := fmt.Errorf("failed to retrieve subscription for trace exemplars query: %w", err)
+				return nil, utils.ApplySourceFromError(errorMessage, err)
+			}
+			resources = []string{fmt.Sprintf("/subscriptions/%s", subscription)}
 		}
 	}
 
