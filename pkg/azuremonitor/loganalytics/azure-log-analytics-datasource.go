@@ -30,9 +30,6 @@ import (
 	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/utils"
 )
 
-// maxCorrelationPages bounds how many nextLink pages a correlation lookup follows.
-const maxCorrelationPages = 10
-
 // Returns tables with the `HasData` field set to true
 func filterTablesWithData(tables []types.MetadataTable) []types.MetadataTable {
 	filtered := []types.MetadataTable{}
@@ -884,7 +881,7 @@ func getCorrelationWorkspaces(ctx context.Context, baseResource string, resource
 	}
 	nextLink := correlationResponse.Properties.NextLink
 
-	for pages := 0; nextLink != nil && *nextLink != "" && pages < maxCorrelationPages; pages++ {
+	for nextLink != nil && *nextLink != "" {
 		target, query, err := rebaseNextLink(azMonService.URL, *nextLink)
 		if err != nil {
 			return nil, err
