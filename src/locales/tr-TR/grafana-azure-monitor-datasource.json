@@ -190,6 +190,15 @@
       "label-group-by": "Gruplama ölçütü",
       "tooltip-group-by": "Sonuçları belirtilen sütunlara göre kategorilere ayırın. Gruplandırma, seçilen sütunlardaki tekil değerleri listelemek için tek başına kullanılabileceği gibi, her grup için özet istatistikleri üretmek üzere toplama işlevleriyle birlikte de kullanılabilir. Tek başına kullanıldığında, belirtilen sütunların farklı kombinasyonlarını döndürür."
     },
+    "health-models-query-editor": {
+      "aria-label-health-model": "",
+      "aria-label-subscription": "",
+      "aria-label-type": "",
+      "label-health-model": "",
+      "label-subscription": "",
+      "label-type": "",
+      "no-health-models-found": ""
+    },
     "kql-preview": {
       "button-hide": "Gizle",
       "button-show": "Göster",

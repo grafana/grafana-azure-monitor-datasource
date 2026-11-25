@@ -190,6 +190,15 @@
       "label-group-by": "Grupuj według",
       "tooltip-group-by": "Uporządkuj wyniki w kategoriach na podstawie określonych kolumn. Funkcja „Grupuj według” może być używana niezależnie do wyświetlania unikalnych wartości w wybranych kolumnach lub w połączeniu z funkcjami agregującymi do tworzenia statystyk podsumowujących dla każdej grupy. Funkcja użyta samodzielnie zwraca różne kombinacje określonych kolumn."
     },
+    "health-models-query-editor": {
+      "aria-label-health-model": "",
+      "aria-label-subscription": "",
+      "aria-label-type": "",
+      "label-health-model": "",
+      "label-subscription": "",
+      "label-type": "",
+      "no-health-models-found": ""
+    },
     "kql-preview": {
       "button-hide": "Ukryj",
       "button-show": "Pokaż",
