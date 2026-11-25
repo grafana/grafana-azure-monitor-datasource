@@ -902,7 +902,7 @@ func getCorrelationWorkspaces(ctx context.Context, baseResource string, resource
 	nextLink = correlationResponse.Properties.NextLink
 
 	for nextLink != nil && *nextLink != "" {
-		target, err := rebaseNextLink(azMonService.URL, *nextLink)
+		target, err := rebaseNextLink(baseURL, *nextLink)
 		if err != nil {
 			return nil, err
 		}
@@ -920,21 +920,16 @@ func getCorrelationWorkspaces(ctx context.Context, baseResource string, resource
 
 // rebaseNextLink keeps the path and query of an ARM nextLink and places them on the
 // Azure Monitor service URL, so the request goes through the same data source client.
-func rebaseNextLink(serviceURL, nextLink string) (string, error) {
+func rebaseNextLink(baseURL *url.URL, nextLink string) (string, error) {
 	parsed, err := url.Parse(nextLink)
 	if err != nil {
 		return "", fmt.Errorf("invalid correlation nextLink: %w", err)
 	}
-	base, err := url.Parse(serviceURL)
-	if err != nil {
-		return "", fmt.Errorf("invalid Azure Monitor URL: %w", err)
-	}
-	// Append the nextLink path to any path the configured URL already has, the same way the
-	// first correlation URL is built, so a prefix on the service URL is kept.
-	base.Path = strings.TrimSuffix(base.Path, "/") + parsed.Path
-	base.RawPath = ""
-	base.RawQuery = parsed.RawQuery
-	return base.String(), nil
+	target := *baseURL
+	target.Path = strings.TrimSuffix(baseURL.Path, "/") + parsed.Path
+	target.RawPath = ""
+	target.RawQuery = parsed.RawQuery
+	return target.String(), nil
 }
 
 // GetPrimaryResultTable returns the first table in the response named "PrimaryResult", or an

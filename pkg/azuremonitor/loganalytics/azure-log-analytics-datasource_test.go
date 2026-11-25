@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"regexp"
 	"strings"
 	"sync"
@@ -1360,7 +1361,9 @@ func TestRebaseNextLink(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := rebaseNextLink(tt.serviceURL, next)
+			baseURL, err := url.Parse(tt.serviceURL)
+			require.NoError(t, err)
+			got, err := rebaseNextLink(baseURL, next)
 			require.NoError(t, err)
 			require.Equal(t, tt.want, got)
 		})
