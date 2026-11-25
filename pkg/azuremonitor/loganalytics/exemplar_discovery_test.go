@@ -3,11 +3,13 @@ package loganalytics
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"regexp"
 	"strings"
 	"sync"
@@ -23,9 +25,10 @@ import (
 )
 
 const (
-	testComponentA = "/subscriptions/sub-1/resourcegroups/rg/providers/microsoft.insights/components/app-a"
-	testComponentB = "/subscriptions/sub-1/resourcegroups/rg/providers/microsoft.insights/components/app-b"
-	testComponentC = "/subscriptions/sub-2/resourcegroups/rg/providers/microsoft.insights/components/app-c"
+	testComponentA  = "/subscriptions/sub-1/resourcegroups/rg/providers/microsoft.insights/components/app-a"
+	testComponentB  = "/subscriptions/sub-1/resourcegroups/rg/providers/microsoft.insights/components/app-b"
+	testComponentC  = "/subscriptions/sub-2/resourcegroups/rg/providers/microsoft.insights/components/app-c"
+	testOperationID = "d958cc15dfc4fbaafeb3f5d8a04e3d01"
 )
 
 func newARGTestDsInfo(url string, client *http.Client) types.DatasourceInfo {
@@ -110,11 +113,8 @@ func TestListReadableAppInsightsComponents_Forbidden(t *testing.T) {
 
 	_, _, err := listReadableAppInsightsComponents(context.Background(), newARGTestDsInfo(svr.URL, svr.Client()))
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "403 Forbidden")
-	require.NotContains(t, err.Error(), "raw azure body")
+	require.EqualError(t, err, "no Application Insights components are readable by this identity (Azure Resource Graph returned 403 Forbidden)")
 }
-
-const testOperationID = "d958cc15dfc4fbaafeb3f5d8a04e3d01"
 
 func newLogsTestDsInfo(url string, client *http.Client) types.DatasourceInfo {
 	return types.DatasourceInfo{
@@ -136,9 +136,11 @@ func TestComponentHasOperation(t *testing.T) {
 		body       string
 		operation  string
 		expected   componentCheck
-		expectHit  bool
 		expectErr  bool
 		expectSkip bool
+		// expectFailed means the check must stop the lookup, not just skip this component.
+		expectFailed bool
+		wantErr      string
 	}{
 		{
 			name:      "row returned means the trace is in this component",
@@ -146,7 +148,6 @@ func TestComponentHasOperation(t *testing.T) {
 			body:      `{"tables":[{"name":"PrimaryResult","columns":[{"name":"timestamp","type":"datetime"}],"rows":[["2026-11-18T19:45:00Z"]]}]}`,
 			operation: testOperationID,
 			expected:  componentHasTrace,
-			expectHit: true,
 		},
 		{
 			name:      "no rows means the component does not have it",
@@ -154,7 +155,6 @@ func TestComponentHasOperation(t *testing.T) {
 			body:      `{"tables":[{"name":"PrimaryResult","columns":[],"rows":[]}]}`,
 			operation: testOperationID,
 			expected:  componentAbsent,
-			expectHit: true,
 		},
 		{
 			name:       "403 skips the component without failing the lookup",
@@ -162,8 +162,35 @@ func TestComponentHasOperation(t *testing.T) {
 			body:       `{"error":{"code":"AuthorizationFailed"}}`,
 			operation:  testOperationID,
 			expected:   componentSkipped,
-			expectHit:  true,
 			expectSkip: true,
+			wantErr:    `presence check returned 403 Forbidden: {"error":{"code":"AuthorizationFailed"}}`,
+		},
+		{
+			name:         "401 fails the lookup because every component would fail the same way",
+			status:       http.StatusUnauthorized,
+			body:         `{"error":{"code":"ExpiredAuthenticationToken"}}`,
+			wantErr:      `presence check returned 401 Unauthorized: {"error":{"code":"ExpiredAuthenticationToken"}}`,
+			operation:    testOperationID,
+			expected:     componentFailed,
+			expectFailed: true,
+		},
+		{
+			name:         "429 fails the lookup instead of reporting the component as skipped",
+			status:       http.StatusTooManyRequests,
+			body:         `{"error":{"code":"TooManyRequests"}}`,
+			wantErr:      `presence check returned 429 Too Many Requests: {"error":{"code":"TooManyRequests"}}`,
+			operation:    testOperationID,
+			expected:     componentFailed,
+			expectFailed: true,
+		},
+		{
+			name:         "500 fails the lookup",
+			status:       http.StatusInternalServerError,
+			body:         `{"error":{"code":"InternalServerError"}}`,
+			wantErr:      `presence check returned 500 Internal Server Error: {"error":{"code":"InternalServerError"}}`,
+			operation:    testOperationID,
+			expected:     componentFailed,
+			expectFailed: true,
 		},
 		{
 			name:      "operation id outside hex is rejected before any request",
@@ -171,6 +198,7 @@ func TestComponentHasOperation(t *testing.T) {
 			body:      `{}`,
 			operation: "x' | drop table",
 			expectErr: true,
+			wantErr:   "invalid operation id for trace exemplar lookup",
 		},
 	}
 
@@ -196,13 +224,12 @@ func TestComponentHasOperation(t *testing.T) {
 			got, err := componentHasOperation(context.Background(), dsInfo, componentID, tt.operation, testTimeRange())
 
 			if tt.expectErr {
-				require.Error(t, err)
+				require.EqualError(t, err, tt.wantErr)
 				require.Equal(t, 0, hits, "invalid operation id must not reach the server")
 				return
 			}
-			if tt.expectSkip {
-				require.Error(t, err, "a skipped component must say why")
-				require.Contains(t, err.Error(), "403")
+			if tt.expectSkip || tt.expectFailed {
+				require.EqualError(t, err, tt.wantErr)
 			} else {
 				require.NoError(t, err)
 			}
@@ -213,6 +240,56 @@ func TestComponentHasOperation(t *testing.T) {
 			require.Contains(t, gotQuery, "take 1")
 		})
 	}
+}
+
+type failingTransport struct{ err error }
+
+func (f failingTransport) RoundTrip(*http.Request) (*http.Response, error) { return nil, f.err }
+
+func TestComponentHasOperationFailsOnTransportProblems(t *testing.T) {
+	componentID := "/subscriptions/sub-1/resourceGroups/rg/providers/microsoft.insights/components/app-a"
+
+	t.Run("a connection error fails the check and names the cause, not the URL", func(t *testing.T) {
+		client := &http.Client{Transport: failingTransport{err: &url.Error{
+			Op:  "Post",
+			URL: "https://api.loganalytics.io/v1" + componentID + "/query",
+			Err: errors.New("dial tcp: connection refused"),
+		}}}
+		dsInfo := newLogsTestDsInfo("https://api.loganalytics.io", client)
+
+		status, err := componentHasOperation(context.Background(), dsInfo, componentID, testOperationID, testTimeRange())
+		require.Equal(t, componentFailed, status)
+		require.Error(t, err)
+		require.EqualError(t, err, "could not reach Azure Log Analytics: dial tcp: connection refused")
+	})
+
+	t.Run("a cancelled context fails the check", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = io.WriteString(w, `{"tables":[]}`)
+		}))
+		defer svr.Close()
+		dsInfo := newLogsTestDsInfo(svr.URL, svr.Client())
+
+		status, err := componentHasOperation(ctx, dsInfo, componentID, testOperationID, testTimeRange())
+		require.Equal(t, componentFailed, status)
+		require.EqualError(t, err, "could not reach Azure Log Analytics: context canceled")
+	})
+
+	t.Run("a response cut off mid-body fails the check", func(t *testing.T) {
+		svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Content-Length", "500")
+			_, _ = io.WriteString(w, `{"tables":[`)
+		}))
+		defer svr.Close()
+		dsInfo := newLogsTestDsInfo(svr.URL, svr.Client())
+
+		status, err := componentHasOperation(context.Background(), dsInfo, componentID, testOperationID, testTimeRange())
+		require.Equal(t, componentFailed, status)
+		require.EqualError(t, err, "could not read Azure Log Analytics response: unexpected EOF")
+	})
 }
 
 // discoveryServer serves a Resource Graph component list, union queries, and per-component queries.
@@ -271,9 +348,9 @@ func (d *discoveryServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		rows := make([]map[string]string, 0, len(d.components))
 		for _, id := range d.components {
 			name := componentName(id)
-			appID := appIDFor(name)
-			if d.noAppID[name] {
-				appID = ""
+			var appID string
+			if !d.noAppID[name] {
+				appID = appIDFor(name)
 			}
 			rows = append(rows, map[string]string{
 				"id":             id,
@@ -388,12 +465,12 @@ func newDiscoveryDsInfo(url string, client *http.Client) types.DatasourceInfo {
 }
 
 func TestBuildUnionQuery(t *testing.T) {
-	q := buildUnionQuery([]appInsightsComponent{{ID: componentID("app-a"), AppID: appIDFor("app-a")}}, testOperationID)
 	appID := appIDFor("app-a")
-	require.True(t, strings.HasPrefix(q, fmt.Sprintf("union app('%s').requests, app('%s').dependencies", appID, appID)), q)
-	require.Contains(t, q, fmt.Sprintf("app('%s').availabilityResults", appID))
-	require.Contains(t, q, fmt.Sprintf("where operation_Id == '%s'", testOperationID))
-	require.True(t, strings.HasSuffix(q, "summarize rows = count() by _ResourceId"), q)
+	q := buildUnionQuery([]appInsightsComponent{{ID: componentID("app-a"), AppID: appID}}, testOperationID)
+	// The full expected query, with tables in the order the service sees them.
+	want := fmt.Sprintf("union app('%[1]s').requests, app('%[1]s').dependencies | where operation_Id == '%[2]s' | summarize rows = count() by _ResourceId",
+		appID, testOperationID)
+	require.Equal(t, want, q)
 }
 
 func TestChunkComponents(t *testing.T) {
@@ -454,9 +531,7 @@ func TestDiscoverExemplarComponent(t *testing.T) {
 
 		_, err := discoverExemplarComponent(context.Background(), newDiscoveryDsInfo(svr.URL, svr.Client()), testOperationID, testTimeRange(), log.DefaultLogger)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "in 2 Application Insights components")
-		require.NotContains(t, err.Error(), "skipped")
-		require.NotContains(t, err.Error(), "first ")
+		require.EqualError(t, err, fmt.Sprintf("trace %s was not found in 2 Application Insights components this identity can read", testOperationID))
 	})
 
 	t.Run("skipped components are named in the error", func(t *testing.T) {
@@ -470,8 +545,7 @@ func TestDiscoverExemplarComponent(t *testing.T) {
 
 		_, err := discoverExemplarComponent(context.Background(), newDiscoveryDsInfo(svr.URL, svr.Client()), testOperationID, testTimeRange(), log.DefaultLogger)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "in 1 Application Insights components")
-		require.Contains(t, err.Error(), "skipped 1: app-a (subscription sub-a)")
+		require.EqualError(t, err, fmt.Sprintf("trace %s was not found in 1 Application Insights components this identity can read (skipped 1: not readable by this identity: subscription sub-a (app-a))", testOperationID))
 	})
 
 	t.Run("the lookup stops at the first batch that has the trace", func(t *testing.T) {
@@ -578,8 +652,7 @@ func TestDiscoverExemplarComponent(t *testing.T) {
 
 		_, err := discoverExemplarComponent(context.Background(), newDiscoveryDsInfo(svr.URL, svr.Client()), testOperationID, testTimeRange(), log.DefaultLogger)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "in 1 Application Insights components")
-		require.Contains(t, err.Error(), "skipped 1: app-a (subscription sub-a)")
+		require.EqualError(t, err, fmt.Sprintf("trace %s was not found in 1 Application Insights components this identity can read (skipped 1: route component returned 404: subscription sub-a (app-a))", testOperationID))
 	})
 
 	t.Run("repeated rejections stop at the query budget", func(t *testing.T) {
@@ -596,7 +669,7 @@ func TestDiscoverExemplarComponent(t *testing.T) {
 		defer svr.Close()
 
 		_, err := discoverExemplarComponent(context.Background(), newDiscoveryDsInfo(svr.URL, svr.Client()), testOperationID, testTimeRange(), log.DefaultLogger)
-		require.ErrorContains(t, err, fmt.Sprintf("reached the limit of %d Log Analytics queries", exemplarMaxQueries))
+		require.EqualError(t, err, fmt.Sprintf("trace exemplar lookup stopped: reached the limit of %d Log Analytics queries for one lookup", exemplarMaxQueries))
 		sent := d.unions
 		for _, n := range d.hits {
 			sent += n
@@ -611,44 +684,41 @@ func TestDiscoverExemplarComponent(t *testing.T) {
 		dsInfo := newDiscoveryDsInfo(svr.URL, svr.Client())
 
 		_, err := discoverExemplarComponent(context.Background(), dsInfo, "", testTimeRange(), log.DefaultLogger)
-		require.ErrorContains(t, err, "needs an operation ID")
+		require.EqualError(t, err, "trace exemplar lookup needs an operation ID")
 		require.True(t, backend.IsDownstreamError(err))
 
 		_, err = discoverExemplarComponent(context.Background(), dsInfo, "not-hex", testTimeRange(), log.DefaultLogger)
-		require.ErrorContains(t, err, "must be 1 to 64 hex characters")
+		require.EqualError(t, err, "operation ID for trace exemplar lookup must be 1 to 64 hex characters")
 		require.True(t, backend.IsDownstreamError(err))
 		require.Zero(t, d.unions)
 	})
 
-	t.Run("a server error stops the lookup instead of retrying", func(t *testing.T) {
-		d := &discoveryServer{
-			components:  []string{componentID("app-a"), componentID("app-b")},
-			unionStatus: http.StatusInternalServerError,
-			hits:        map[string]int{},
+	t.Run("service-wide union failures stop the lookup instead of splitting or retrying", func(t *testing.T) {
+		tests := []struct {
+			name    string
+			status  int
+			wantErr string
+		}{
+			{name: "authentication", status: http.StatusUnauthorized, wantErr: `trace exemplar lookup stopped: union presence check returned 401 Unauthorized: {"error":{"code":"BadArgumentError","message":"The request had some invalid properties"}}`},
+			{name: "throttling", status: http.StatusTooManyRequests, wantErr: `trace exemplar lookup stopped: union presence check returned 429 Too Many Requests: {"error":{"code":"BadArgumentError","message":"The request had some invalid properties"}}`},
+			{name: "server error", status: http.StatusInternalServerError, wantErr: `trace exemplar lookup stopped: union presence check returned 500 Internal Server Error: {"error":{"code":"BadArgumentError","message":"The request had some invalid properties"}}`},
 		}
-		svr := httptest.NewServer(d)
-		defer svr.Close()
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				d := &discoveryServer{
+					components:  []string{componentID("app-a"), componentID("app-b")},
+					unionStatus: tt.status,
+					hits:        map[string]int{},
+				}
+				svr := httptest.NewServer(d)
+				defer svr.Close()
 
-		_, err := discoverExemplarComponent(context.Background(), newDiscoveryDsInfo(svr.URL, svr.Client()), testOperationID, testTimeRange(), log.DefaultLogger)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "500")
-		require.Equal(t, 1, d.unions, "a 500 must not be split or retried")
-		require.Empty(t, d.hits["app-a"], "a 500 must not fall back to per-component checks")
-	})
-
-	t.Run("throttling stops the lookup instead of splitting the batch", func(t *testing.T) {
-		d := &discoveryServer{
-			components:  []string{componentID("app-a"), componentID("app-b")},
-			unionStatus: http.StatusTooManyRequests,
-			hits:        map[string]int{},
+				_, err := discoverExemplarComponent(context.Background(), newDiscoveryDsInfo(svr.URL, svr.Client()), testOperationID, testTimeRange(), log.DefaultLogger)
+				require.EqualError(t, err, tt.wantErr)
+				require.Equal(t, 1, d.unions, "the failure must not be split or retried")
+				require.Empty(t, d.hits["app-a"], "the failure must not fall back to per-component checks")
+			})
 		}
-		svr := httptest.NewServer(d)
-		defer svr.Close()
-
-		_, err := discoverExemplarComponent(context.Background(), newDiscoveryDsInfo(svr.URL, svr.Client()), testOperationID, testTimeRange(), log.DefaultLogger)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "429")
-		require.Equal(t, 1, d.unions, "throttled requests must not be multiplied")
 	})
 
 	t.Run("when every component is unreadable the lookup says it could not run", func(t *testing.T) {
@@ -662,8 +732,7 @@ func TestDiscoverExemplarComponent(t *testing.T) {
 
 		_, err := discoverExemplarComponent(context.Background(), newDiscoveryDsInfo(svr.URL, svr.Client()), testOperationID, testTimeRange(), log.DefaultLogger)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "could not check any of 2 Application Insights components")
-		require.NotContains(t, err.Error(), "not found")
+		require.EqualError(t, err, fmt.Sprintf("could not check any of 2 Application Insights components for trace %s: not readable by this identity: subscription sub-a (app-a), subscription sub-b (app-b)", testOperationID))
 	})
 
 	t.Run("a component without an app ID is checked on its own", func(t *testing.T) {
@@ -682,6 +751,39 @@ func TestDiscoverExemplarComponent(t *testing.T) {
 		require.Equal(t, 1, d.hits["app-a"], "app-a is checked on its own, not in a union")
 	})
 
+	t.Run("a union match is returned without checking a component on its own", func(t *testing.T) {
+		d := &discoveryServer{
+			components: []string{componentID("app-a"), componentID("app-b")},
+			noAppID:    map[string]bool{"app-a": true},
+			status:     map[string]int{"app-a": http.StatusTooManyRequests},
+			hasRow:     map[string]bool{"app-b": true},
+			hits:       map[string]int{},
+		}
+		svr := httptest.NewServer(d)
+		defer svr.Close()
+
+		got, err := discoverExemplarComponent(context.Background(), newDiscoveryDsInfo(svr.URL, svr.Client()), testOperationID, testTimeRange(), log.DefaultLogger)
+		require.NoError(t, err)
+		require.Equal(t, componentID("app-b"), got)
+		require.Equal(t, 0, d.hits["app-a"], "app-a is not checked on its own once the union finds the trace")
+	})
+
+	t.Run("throttling on a component checked on its own stops the lookup", func(t *testing.T) {
+		d := &discoveryServer{
+			components: []string{componentID("app-a"), componentID("app-b")},
+			noAppID:    map[string]bool{"app-a": true},
+			status:     map[string]int{"app-a": http.StatusTooManyRequests},
+			hits:       map[string]int{},
+		}
+		svr := httptest.NewServer(d)
+		defer svr.Close()
+
+		_, err := discoverExemplarComponent(context.Background(), newDiscoveryDsInfo(svr.URL, svr.Client()), testOperationID, testTimeRange(), log.DefaultLogger)
+		require.Error(t, err)
+		require.EqualError(t, err, `trace exemplar lookup stopped: presence check returned 429 Too Many Requests: {"error":{"code":"AuthorizationFailed"}}`)
+		require.Equal(t, 1, d.unions, "the union runs first and finds nothing")
+	})
+
 	t.Run("truncated list says so and checks only the cap", func(t *testing.T) {
 		var ids []string
 		hits := map[string]int{}
@@ -694,9 +796,27 @@ func TestDiscoverExemplarComponent(t *testing.T) {
 
 		_, err := discoverExemplarComponent(context.Background(), newDiscoveryDsInfo(svr.URL, svr.Client()), testOperationID, testTimeRange(), log.DefaultLogger)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), fmt.Sprintf("first %d components", exemplarComponentCap))
+		require.EqualError(t, err, fmt.Sprintf("trace %s was not found in %d Application Insights components this identity can read; only the first %d components ordered by subscription and resource id were checked", testOperationID, exemplarComponentCap, exemplarComponentCap))
 		require.Len(t, hits, exemplarComponentCap, "components past the cap must not be checked")
 	})
+}
+
+func TestSkippedList(t *testing.T) {
+	subscriptions := map[string]string{
+		componentID("app-a"): "sub-a",
+		componentID("app-b"): "sub-a",
+		componentID("app-c"): "sub-c",
+		componentID("app-d"): "sub-b",
+	}
+	skipped := map[string]string{
+		componentID("app-b"): "not readable by this identity",
+		componentID("app-a"): "not readable by this identity",
+		componentID("app-d"): "not readable by this identity",
+		componentID("app-c"): "route component returned 404",
+	}
+	require.Equal(t,
+		"not readable by this identity: subscription sub-a (app-a, app-b), subscription sub-b (app-d); route component returned 404: subscription sub-c (app-c)",
+		skippedList(skipped, subscriptions))
 }
 
 // TestDiscoverExemplarComponentSendsOneQueryAtATime checks that a lookup never has more than one
@@ -728,7 +848,7 @@ func TestDiscoverExemplarComponentSendsOneQueryAtATime(t *testing.T) {
 	defer svr.Close()
 
 	_, err := discoverExemplarComponent(context.Background(), newDiscoveryDsInfo(svr.URL, svr.Client()), "0123456789abcdef", testTimeRange(), log.DefaultLogger)
-	require.ErrorContains(t, err, "was not found in 60 Application Insights components")
+	require.EqualError(t, err, fmt.Sprintf("trace 0123456789abcdef was not found in %d Application Insights components this identity can read", len(ids)))
 	require.Equal(t, 1, maxInFlight)
 	require.Equal(t, (len(ids)+exemplarUnionBatchSize-1)/exemplarUnionBatchSize, d.unions)
 }
