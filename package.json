@@ -78,7 +78,7 @@
     "@grafana/azure-sdk": "0.1.2",
     "@grafana/data": "13.3.2",
     "@grafana/i18n": "13.3.2",
-    "@grafana/plugin-ui": "0.18.0",
+    "@grafana/plugin-ui": "0.17.4",
     "@grafana/runtime": "13.3.2",
     "@grafana/schema": "13.3.2",
     "@grafana/ui": "13.3.2",
