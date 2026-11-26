@@ -44,3 +44,4 @@ jobs:
           en_paths: src/locales/en-US/grafana-azure-monitor-datasource.json
           github_board_id: 1085 # Grafana Data Sources project
           github_repo_token: ${{ steps.get-github-app-token.outputs.token }}
+          github_pr_approver_token: ${{ steps.get-github-approver-token.outputs.token }}
