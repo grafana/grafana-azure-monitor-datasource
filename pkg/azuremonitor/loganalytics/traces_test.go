@@ -4,21 +4,25 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/open-feature/go-sdk/openfeature"
+	"github.com/open-feature/go-sdk/openfeature/memprovider"
 	"github.com/stretchr/testify/require"
 
+	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/kinds/dataquery"
+	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/types"
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/httpclient"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
-	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/kinds/dataquery"
-	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/types"
 )
 
 func TestBuildAppInsightsQuery(t *testing.T) {
@@ -1299,4 +1303,163 @@ func TestBuildAppInsightsQuery_EmptyResources(t *testing.T) {
 			require.Contains(t, err.Error(), tt.expectedErrorString)
 		})
 	}
+}
+
+func TestBuildAppInsightsQuery_ExemplarDiscovery(t *testing.T) {
+	const componentName = "app-a"
+	componentResourceID := "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.Insights/components/" + componentName
+	operationID := "d958cc15dfc4fbaafeb3f5d8a04e3d01"
+
+	var subscriptionsHit bool
+	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		path := r.URL.Path
+		switch {
+		case path == "/subscriptions":
+			subscriptionsHit = true
+			w.WriteHeader(http.StatusForbidden)
+		case strings.HasSuffix(path, "/providers/Microsoft.ResourceGraph/resources"):
+			_, _ = io.WriteString(w, fmt.Sprintf(`{"data":[{"id":%q,"subscriptionId":"sub","appId":"11111111-2222-4333-8444-555555555555"}]}`, componentResourceID))
+		case strings.HasSuffix(path, "/components/"+componentName+"/query"):
+			raw, _ := io.ReadAll(r.Body)
+			if strings.Contains(string(raw), "summarize rows") {
+				// Union queries return one _ResourceId row per component that holds the operation.
+				_, _ = io.WriteString(w, fmt.Sprintf(`{"tables":[{"name":"PrimaryResult","columns":[{"name":"_ResourceId","type":"string"},{"name":"rows","type":"long"}],"rows":[[%q,1]]}]}`, strings.ToLower(componentResourceID)))
+				return
+			}
+			_, _ = io.WriteString(w, `{"tables":[{"name":"PrimaryResult","columns":[],"rows":[["2026-11-18T19:45:00Z"]]}]}`)
+		case strings.Contains(strings.ToLower(path), "/providers/microsoft.insights/transactions/"):
+			correlationRes := AzureCorrelationAPIResponse{
+				ID:         componentResourceID,
+				Name:       operationID,
+				Type:       "microsoft.insights/transactions",
+				Properties: AzureCorrelationAPIResponseProperties{Resources: []string{componentResourceID}},
+			}
+			_ = json.NewEncoder(w).Encode(correlationRes)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer svr.Close()
+
+	provider := httpclient.NewProvider(httpclient.ProviderOptions{Timeout: &httpclient.DefaultTimeoutOptions})
+	client, err := provider.New()
+	require.NoError(t, err)
+
+	dsInfo := types.DatasourceInfo{
+		Services: map[string]types.DatasourceService{
+			"Azure Monitor":        {URL: svr.URL, HTTPClient: client},
+			"Azure Resource Graph": {URL: svr.URL, HTTPClient: client},
+			"Azure Log Analytics":  {URL: svr.URL, HTTPClient: client},
+		},
+		JSONData: map[string]any{"azureLogAnalyticsSameAs": false},
+		Settings: types.AzureMonitorSettings{SubscriptionId: ""},
+	}
+	appInsightsRegExp := regexp.MustCompile("providers/Microsoft.Insights/components")
+	fromStart := time.Date(2026, 11, 18, 19, 0, 0, 0, time.UTC)
+	timeRange := backend.TimeRange{From: fromStart, To: fromStart.Add(time.Hour)}
+
+	query := backend.DataQuery{
+		JSON: fmt.Appendf(nil, `{
+			"queryType": "traceql",
+			"azureTraces": {
+				"resources": [],
+				"resultFormat": "%s",
+				"traceTypes": ["trace"],
+				"operationId": %q
+			}
+		}`, dataquery.ResultFormatTable, operationID),
+		RefID:     "A",
+		TimeRange: timeRange,
+		QueryType: string(dataquery.AzureQueryTypeTraceExemplar),
+	}
+
+	built, err := buildAppInsightsQuery(stubExemplarDiscoveryFlag(t, true), query, dsInfo, appInsightsRegExp, log.NewNullLogger())
+	require.NoError(t, err)
+	require.NotNil(t, built)
+	// Resource IDs are lowercased in the correlation set, so compare case-insensitively.
+	require.Len(t, built.Resources, 1)
+	require.True(t, strings.EqualFold(componentResourceID, built.Resources[0]), "got %s", built.Resources[0])
+	require.Contains(t, built.URL, "/components/"+componentName+"/query")
+	require.False(t, subscriptionsHit, "exemplar discovery must not list subscriptions")
+}
+
+// TestBuildAppInsightsQuery_ExemplarFlagOff checks that with the discovery flag off, a trace exemplar
+// with no default subscription uses the default subscription lookup and never calls Resource Graph.
+func TestBuildAppInsightsQuery_ExemplarFlagOff(t *testing.T) {
+	var mu sync.Mutex
+	var paths []string
+	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		paths = append(paths, r.URL.Path)
+		mu.Unlock()
+		if r.URL.Path == "/subscriptions" {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer svr.Close()
+
+	provider := httpclient.NewProvider(httpclient.ProviderOptions{Timeout: &httpclient.DefaultTimeoutOptions})
+	client, err := provider.New()
+	require.NoError(t, err)
+
+	dsInfo := types.DatasourceInfo{
+		Services: map[string]types.DatasourceService{
+			"Azure Monitor":        {URL: svr.URL, HTTPClient: client},
+			"Azure Resource Graph": {URL: svr.URL, HTTPClient: client},
+			"Azure Log Analytics":  {URL: svr.URL, HTTPClient: client},
+		},
+		Routes:   map[string]types.AzRoute{"Azure Monitor": {URL: svr.URL}},
+		JSONData: map[string]any{"azureLogAnalyticsSameAs": false},
+		Settings: types.AzureMonitorSettings{SubscriptionId: ""},
+	}
+	fromStart := time.Date(2026, 11, 18, 19, 0, 0, 0, time.UTC)
+	query := backend.DataQuery{
+		JSON: fmt.Appendf(nil, `{
+			"queryType": "traceql",
+			"azureTraces": {
+				"resources": [],
+				"resultFormat": "%s",
+				"traceTypes": ["trace"],
+				"operationId": "d958cc15dfc4fbaafeb3f5d8a04e3d01"
+			}
+		}`, dataquery.ResultFormatTable),
+		RefID:     "A",
+		TimeRange: backend.TimeRange{From: fromStart, To: fromStart.Add(time.Hour)},
+		QueryType: string(dataquery.AzureQueryTypeTraceExemplar),
+	}
+
+	built, err := buildAppInsightsQuery(stubExemplarDiscoveryFlag(t, false), query, dsInfo, regexp.MustCompile("providers/Microsoft.Insights/components"), log.NewNullLogger())
+	require.Error(t, err)
+	require.Nil(t, built)
+	require.Contains(t, err.Error(), "failed to retrieve subscription for trace exemplars query")
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.Contains(t, paths, "/subscriptions")
+	for _, p := range paths {
+		require.NotContains(t, p, "ResourceGraph", "flag off must not run component discovery")
+	}
+}
+
+// exemplarFlagMutex serializes tests around the process-global OpenFeature provider.
+var exemplarFlagMutex sync.Mutex
+
+// stubExemplarDiscoveryFlag registers an in-memory OpenFeature provider with the exemplar discovery
+// flag set for the duration of the test and returns the context to evaluate it with.
+func stubExemplarDiscoveryFlag(t *testing.T, enabled bool) context.Context {
+	t.Helper()
+	exemplarFlagMutex.Lock()
+	provider := memprovider.NewInMemoryProvider(map[string]memprovider.InMemoryFlag{
+		exemplarComponentDiscoveryFlag: {Key: exemplarComponentDiscoveryFlag, DefaultVariant: "default", Variants: map[string]any{"default": enabled}},
+	})
+	require.NoError(t, openfeature.SetProviderAndWait(provider))
+	t.Cleanup(func() {
+		// Not require.NoError: a FailNow here would skip the unlock and deadlock the rest of the package.
+		_ = openfeature.SetProviderAndWait(openfeature.NoopProvider{})
+		exemplarFlagMutex.Unlock()
+	})
+	return context.Background()
 }

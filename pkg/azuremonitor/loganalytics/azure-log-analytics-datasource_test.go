@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"regexp"
 	"strings"
 	"sync"
@@ -1292,5 +1293,78 @@ func BenchmarkEncodeQuery(b *testing.B) {
 		if _, err := encodeQuery(query); err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+func TestGetCorrelationWorkspaces_FollowsNextLink(t *testing.T) {
+	var page2Hits int
+	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "page-2") {
+			page2Hits++
+			_ = json.NewEncoder(w).Encode(AzureCorrelationAPIResponse{
+				Properties: AzureCorrelationAPIResponseProperties{
+					Resources: []string{"/subscriptions/sub/resourceGroups/rg/providers/Microsoft.Insights/components/r2"},
+				},
+			})
+			return
+		}
+		// An absolute nextLink, as ARM returns it, pointing at the same service.
+		next := "https://management.azure.com" + "/page-2?$skiptoken=abc"
+		_ = json.NewEncoder(w).Encode(AzureCorrelationAPIResponse{
+			Properties: AzureCorrelationAPIResponseProperties{
+				Resources: []string{"/subscriptions/sub/resourceGroups/rg/providers/Microsoft.Insights/components/r1"},
+				NextLink:  &next,
+			},
+		})
+	}))
+	defer svr.Close()
+
+	dsInfo := types.DatasourceInfo{
+		Services: map[string]types.DatasourceService{
+			"Azure Monitor": {URL: svr.URL, HTTPClient: svr.Client()},
+		},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	got, err := getCorrelationWorkspaces(ctx, "/subscriptions/sub", map[string]bool{}, dsInfo, "op")
+	require.NoError(t, err)
+	require.Equal(t, 1, page2Hits)
+	_, ok := got["/subscriptions/sub/resourcegroups/rg/providers/microsoft.insights/components/r2"]
+	require.True(t, ok, "second page resource missing: %#v", got)
+}
+
+func TestRebaseNextLink(t *testing.T) {
+	const next = "https://management.azure.com/subscriptions/sub/providers/microsoft.insights/transactions/op?api-version=2019-10-17-preview&$skipToken=abc"
+
+	tests := []struct {
+		name       string
+		serviceURL string
+		want       string
+	}{
+		{
+			name:       "service URL without a path",
+			serviceURL: "https://management.azure.com",
+			want:       "https://management.azure.com/subscriptions/sub/providers/microsoft.insights/transactions/op?api-version=2019-10-17-preview&$skipToken=abc",
+		},
+		{
+			name:       "service URL with a path keeps it",
+			serviceURL: "https://proxy.example.com/azuremonitor",
+			want:       "https://proxy.example.com/azuremonitor/subscriptions/sub/providers/microsoft.insights/transactions/op?api-version=2019-10-17-preview&$skipToken=abc",
+		},
+		{
+			name:       "service URL with a trailing slash does not double it",
+			serviceURL: "https://proxy.example.com/azuremonitor/",
+			want:       "https://proxy.example.com/azuremonitor/subscriptions/sub/providers/microsoft.insights/transactions/op?api-version=2019-10-17-preview&$skipToken=abc",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			baseURL, err := url.Parse(tt.serviceURL)
+			require.NoError(t, err)
+			got, err := rebaseNextLink(baseURL, next)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
 	}
 }

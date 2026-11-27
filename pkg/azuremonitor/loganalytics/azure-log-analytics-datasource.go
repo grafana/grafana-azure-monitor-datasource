@@ -844,7 +844,7 @@ func getCorrelationWorkspaces(ctx context.Context, baseResource string, resource
 		}
 		req.Header.Set("Content-Type", "application/json")
 		values := req.URL.Query()
-		values.Add("api-version", "2019-10-17-preview")
+		values.Set("api-version", "2019-10-17-preview")
 		req.URL.RawQuery = values.Encode()
 
 		_, span := tracing.DefaultTracer().Start(ctx, "azure traces correlation request", trace.WithAttributes(
@@ -901,8 +901,12 @@ func getCorrelationWorkspaces(ctx context.Context, baseResource string, resource
 	}
 	nextLink = correlationResponse.Properties.NextLink
 
-	for nextLink != nil {
-		correlationResponse, err := callCorrelationAPI(correlationUrl)
+	for nextLink != nil && *nextLink != "" {
+		target, err := rebaseNextLink(baseURL, *nextLink)
+		if err != nil {
+			return nil, err
+		}
+		correlationResponse, err = callCorrelationAPI(target)
 		if err != nil {
 			return nil, err
 		}
@@ -912,6 +916,20 @@ func getCorrelationWorkspaces(ctx context.Context, baseResource string, resource
 	// Remove the base element as that's where the query is run anyway
 	delete(resourcesMap, strings.ToLower(baseResource))
 	return resourcesMap, nil
+}
+
+// rebaseNextLink keeps the path and query of an ARM nextLink and places them on the
+// Azure Monitor service URL, so the request goes through the same data source client.
+func rebaseNextLink(baseURL *url.URL, nextLink string) (string, error) {
+	parsed, err := url.Parse(nextLink)
+	if err != nil {
+		return "", fmt.Errorf("invalid correlation nextLink: %w", err)
+	}
+	target := *baseURL
+	target.Path = strings.TrimSuffix(baseURL.Path, "/") + parsed.Path
+	target.RawPath = ""
+	target.RawQuery = parsed.RawQuery
+	return target.String(), nil
 }
 
 // GetPrimaryResultTable returns the first table in the response named "PrimaryResult", or an
