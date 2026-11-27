@@ -1,7 +1,10 @@
-## Unreleased
+## 13.1.1
 
 - Fix the resource picker discarding typed Advanced values and searches when the query editor updates
 - Fix invalid saved credentials, such as a missing tenant ID, counting as plugin errors instead of downstream errors
+- Fix a security vulnerability in fast-uri in [#194](https://github.com/grafana/grafana-azure-monitor-datasource/pull/194)
+- Update frontend dependencies in [#94](https://github.com/grafana/grafana-azure-monitor-datasource/pull/94)
+- Update translations in [#171](https://github.com/grafana/grafana-azure-monitor-datasource/pull/171)
 
 ## 13.1.0
 
