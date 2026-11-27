@@ -292,6 +292,10 @@ export const defaultAzureTracesQuery: Partial<AzureTracesQuery> = {
 
 export interface AzureHealthModelsQuery {
   /**
+   * Saved data-plane URL for the selected Health Model.
+   */
+  dataplaneUrl?: string;
+  /**
    * Full ARM resource ID of the selected Health Model.
    */
   healthModelResourceId?: string;

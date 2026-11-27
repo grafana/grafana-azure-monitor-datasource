@@ -169,6 +169,8 @@ composableKinds: DataQuery: {
 				} @cuetsy(kind="interface")
 
 				#AzureHealthModelsQuery: {
+					// Saved data-plane URL for the selected Health Model.
+					dataplaneUrl?: string
 					// Full ARM resource ID of the selected Health Model.
 					healthModelResourceId?: string
 					// Type of health model query to run.

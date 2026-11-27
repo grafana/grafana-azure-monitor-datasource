@@ -7,6 +7,7 @@ import {
   type DataFrame,
   type DataQueryRequest,
   type DataQueryResponse,
+  type DataQueryError,
   type DataSourceInstanceSettings,
   LoadingState,
   type QueryFixAction,
@@ -150,13 +151,19 @@ export default class Datasource extends DataSourceWithBackend<AzureMonitorQuery,
       return forkJoin(observables).pipe(
         map((results: DataQueryResponse[]) => {
           const data: DataFrame[] = [];
+          const errors: DataQueryError[] = [];
           for (const result of results) {
             for (const frame of result.data) {
               data.push(frame);
             }
+            errors.push(...(result.errors ?? []));
           }
 
-          return { state: LoadingState.Done, data };
+          return {
+            state: errors.length ? LoadingState.Error : LoadingState.Done,
+            data,
+            ...(errors.length ? { errors } : {}),
+          };
         })
       );
     }
@@ -176,6 +183,8 @@ export default class Datasource extends DataSourceWithBackend<AzureMonitorQuery,
       subQuery = JSON.stringify(query.azureLogAnalytics);
     } else if (query.queryType === AzureQueryType.AzureResourceGraph) {
       subQuery = JSON.stringify([query.azureResourceGraph, query.subscriptions]);
+    } else if (query.queryType === AzureQueryType.AzureHealthModels) {
+      subQuery = JSON.stringify(query.azureHealthModels);
     }
 
     return !!subQuery && this.templateSrv.containsTemplate(subQuery);
@@ -352,8 +361,7 @@ function hasQueryForType(query: AzureMonitorQuery): boolean {
       return !!query.azureTraces;
 
     case AzureQueryType.AzureHealthModels:
-      // TODO: Enable health models queries once backend query support is available.
-      return false;
+      return !!query.azureHealthModels;
 
     case AzureQueryType.GrafanaTemplateVariableFn:
       return !!query.grafanaTemplateVariableFn;

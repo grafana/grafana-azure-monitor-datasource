@@ -11,6 +11,8 @@ import (
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
+
+	"github.com/grafana/grafana-azure-monitor-datasource/pkg/azuremonitor/healthmodels"
 )
 
 func getTarget(original string) (target string, err error) {
@@ -156,6 +158,28 @@ func (s *DataSource) handleResourceReq(subDataSource string) func(rw http.Respon
 	}
 }
 
+func (s *DataSource) handleHealthModelsResourceReq(rw http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodGet {
+		rw.Header().Set("Allow", http.MethodGet)
+		writeErrorResponse(rw, http.StatusMethodNotAllowed, "the Health Models resource route only supports GET requests")
+		return
+	}
+	service, ok := s.info.Services[azureHealthModels]
+	if !ok {
+		writeErrorResponse(rw, http.StatusBadRequest, "Health Models is not configured for this Azure cloud; configure an explicit Health Models customized route")
+		return
+	}
+	upstream, err := healthmodels.NewDataPlaneRequest(req, service.URL)
+	if err != nil {
+		writeErrorResponse(rw, http.StatusBadRequest, err.Error())
+		return
+	}
+	_, err = s.executors[azureHealthModels].ResourceRequest(rw, upstream, service.HTTPClient)
+	if err != nil {
+		s.logger.Error("error in Health Models resource request", "error", err)
+	}
+}
+
 // newResourceMux provides route definitions shared with the frontend.
 // Check: /public/app/plugins/datasource/azuremonitor/utils/common.ts <routeNames>
 func (s *DataSource) newResourceMux() *http.ServeMux {
@@ -163,5 +187,7 @@ func (s *DataSource) newResourceMux() *http.ServeMux {
 	mux.HandleFunc("/azuremonitor/", s.handleResourceReq(azureMonitor))
 	mux.HandleFunc("/loganalytics/", s.handleResourceReq(azureLogAnalytics))
 	mux.HandleFunc("/resourcegraph/", s.handleResourceReq(azureResourceGraph))
+	mux.HandleFunc("/healthmodels", s.handleHealthModelsResourceReq)
+	mux.HandleFunc("/healthmodels/", s.handleHealthModelsResourceReq)
 	return mux
 }

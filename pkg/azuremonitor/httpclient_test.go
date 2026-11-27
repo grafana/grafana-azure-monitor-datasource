@@ -41,16 +41,20 @@ func TestHttpClient_AzureCredentials(t *testing.T) {
 	provider := &fakeHttpClientProvider{}
 
 	t.Run("should have Azure middleware when scopes provided", func(t *testing.T) {
-		route := types.AzRoute{
-			Scopes: []string{"https://management.azure.com/.default"},
+		for _, routeURL := range []string{"https://management.azure.com", "https://data.cloudhealth.azure.com"} {
+			t.Run(routeURL, func(t *testing.T) {
+				scopes, err := audienceToScopes(routeURL)
+				require.NoError(t, err)
+				_, err = newHTTPClient(context.Background(), types.AzRoute{
+					URL: routeURL, Scopes: scopes,
+				}, model, settings, azureSettings, provider)
+				require.NoError(t, err)
+
+				require.NotNil(t, provider.opts)
+				require.NotNil(t, provider.opts.Middlewares)
+				assert.Len(t, provider.opts.Middlewares, 1)
+			})
 		}
-
-		_, err := newHTTPClient(context.Background(), route, model, settings, azureSettings, provider)
-		require.NoError(t, err)
-
-		require.NotNil(t, provider.opts)
-		require.NotNil(t, provider.opts.Middlewares)
-		assert.Len(t, provider.opts.Middlewares, 1)
 	})
 
 	t.Run("should not have Azure middleware when scopes are not provided", func(t *testing.T) {

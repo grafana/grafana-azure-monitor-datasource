@@ -55,6 +55,9 @@ export default function createMockDatasource(overrides?: DeepPartial<Datasource>
       getDeprecatedDefaultWorkSpace: () => 'defaultWorkspaceId',
       getLogsQueryUsage: jest.fn(),
     },
+    azureHealthModelsDatasource: {
+      getDataplaneUrl: jest.fn().mockResolvedValue('https://unit-test.data.cloudhealth.azure.com'),
+    },
     resourcePickerData: {
       getSubscriptions: () => jest.fn().mockResolvedValue([]),
       getResourceGroupsBySubscriptionId: jest.fn().mockResolvedValue([]),
